@@ -12,7 +12,7 @@ kullanıcının önceliğine göre değişebilir (ör. 2.7 öne alındı).
 - [x] 1.5 Blok kopyalama
 
 ## Aşama 2: orta
-- [ ] 2.1 Bağış bloğu (Shopier, Buy Me a Coffee, Ko-fi, Patreon...; birden fazlası birlikte)
+- [x] 2.1 Bağış bloğu (Shopier, Buy Me a Coffee, Ko-fi, Patreon...; birden fazlası birlikte)
 - [ ] 2.2 Sayfa içi arama
 - [ ] 2.3 Toplu düzenleme (çoklu seçim: gizle, sil, kategori)
 - [ ] 2.4 Linke tarihli hatırlatma notu

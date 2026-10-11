@@ -23,6 +23,7 @@ import FaqBlock from '@/components/blocks/FaqBlock'
 import TimelineBlock from '@/components/blocks/TimelineBlock'
 import CouponBlock from '@/components/blocks/CouponBlock'
 import MapBlock from '@/components/blocks/MapBlock'
+import SupportBlock from '@/components/blocks/SupportBlock'
 import { ITEM_FIELDS, parseImages, parseItems, parseMapLocation, spotifyEmbedUrl } from '@/lib/links'
 import { isSafeUrl } from '@/lib/security'
 import { renderLinkIcon } from '@/lib/linkIcon'
@@ -145,6 +146,8 @@ export default async function Home({ searchParams }: { searchParams?: { link?: s
             url={link.url}
           />
         ) : null
+      case 'support':
+        return <SupportBlock linkId={link.id} title={link.title} text={link.description} items={parseItems('support', link.items)} />
       case 'map': {
         const location = parseMapLocation(link.url)
         return location ? <MapBlock title={link.title} address={link.description} lat={location.lat} lon={location.lon} url={link.url} /> : null

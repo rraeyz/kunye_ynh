@@ -767,6 +767,22 @@ test('mesajlara panelden yanıt', async () => {
   await req('/api/profile', { method: 'PUT', cookie: admin, body: { contactEmail: '' } })
 })
 
+test('destek ol bloğu (birden fazla bağış platformu)', async () => {
+  const add = (body) => req('/api/links', { method: 'POST', cookie: admin, body })
+  assert.equal((await add({ type: 'support', title: 'Kötü', items: [{ platform: 'kofi', url: 'javascript:alert(1)' }] })).status, 400)
+  const res = await add({
+    type: 'support', title: 'Beni destekle', description: 'Kahve ısmarlayabilirsin',
+    items: [{ platform: 'shopier', url: 'https://www.shopier.com/x' }, { platform: 'buymeacoffee', url: 'https://www.buymeacoffee.com/x' }, { platform: 'uydurma', url: 'https://example.com/destek' }],
+  })
+  assert.equal(res.status, 200, JSON.stringify(res.data))
+  assert.equal(JSON.parse(res.data.items)[2].platform, 'other', 'bilinmeyen platform "Diğer" olmalı')
+  const home = (await req('/', { json: false })).text
+  for (const text of ['Beni destekle', 'Kahve ısmarlayabilirsin', 'Shopier', 'Buy Me a Coffee', 'https://www.shopier.com/x', 'Diğer']) {
+    assert.ok(home.includes(text), `ana sayfada olmalı: ${text}`)
+  }
+  await req(`/api/links/${res.data.id}`, { method: 'DELETE', cookie: admin })
+})
+
 test('giriş rate limit: sadece hatalı denemeler sayılır', async () => {
   for (let i = 0; i < 12; i++) {
     assert.equal((await req('/api/auth/login', { method: 'POST', headers: ip(40), body: { username: 'admin', password: PASSWORD } })).status, 200)

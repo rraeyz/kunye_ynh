@@ -1,5 +1,6 @@
 import bcrypt from 'bcryptjs'
 import { isSafeUrl } from '@/lib/security'
+import { SUPPORT_PLATFORMS } from '@/lib/supportPlatforms'
 
 // Desteklenen blok tipleri
 export const LINK_TYPES = [
@@ -7,7 +8,7 @@ export const LINK_TYPES = [
   'embed-youtube', 'embed-twitter', 'embed-instagram',
   'text', 'gallery', 'spotify', 'countdown', 'portfolio',
   'heading', 'skills', 'coupon', 'testimonials', 'faq', 'timeline',
-  'product', 'map',
+  'product', 'map', 'support',
 ] as const
 
 // Liste bloklarının satır alanları (Link.items, JSON dizi). Panel formu ve sayfa da buradan okur.
@@ -16,6 +17,7 @@ export const ITEM_FIELDS: Record<string, readonly string[]> = {
   testimonials: ['quote', 'name', 'role'],
   faq: ['q', 'a'],
   timeline: ['date', 'title', 'text'],
+  support: ['platform', 'url'],
 }
 const MAX_ITEMS = 50
 
@@ -152,8 +154,12 @@ export async function buildLinkData(
   }
 
   if (body.items !== undefined) {
-    const items = parseItems(type, body.items)
+    let items = parseItems(type, body.items)
     if (Array.isArray(body.items) && body.items.length > MAX_ITEMS) return { error: `En fazla ${MAX_ITEMS} satır eklenebilir` }
+    if (type === 'support') {
+      if (items.some((item) => !isSafeUrl(item.url) || !/^https?:/i.test(item.url))) return { error: 'Destek linkleri http(s):// ile başlamalı' }
+      items = items.map((item) => ({ ...item, platform: item.platform in SUPPORT_PLATFORMS ? item.platform : 'other' }))
+    }
     data.items = items.length ? JSON.stringify(items) : ''
   }
 

@@ -8,8 +8,9 @@ import {
   FaGithub, FaTwitter, FaLinkedin, FaInstagram, FaYoutube, FaGlobe, FaEnvelope, FaDiscord, FaMedium, FaLink, FaDonate, FaPhone,
   FaMapMarkerAlt, FaCalendarAlt, FaFileAlt, FaMusic, FaVideo, FaGamepad, FaCamera, FaBook, FaHeart, FaShoppingCart, FaUser, FaUsers,
   FaCode, FaCogs, FaCloud, FaAlignLeft, FaBriefcase, FaHourglassHalf, FaImages, FaSpotify, FaExclamationTriangle,
-  FaHeading, FaTags, FaQuestionCircle, FaStream, FaQuoteLeft, FaTicketAlt, FaShoppingBag, FaMapMarkedAlt, FaCopy,
+  FaHeading, FaTags, FaQuestionCircle, FaStream, FaQuoteLeft, FaTicketAlt, FaShoppingBag, FaMapMarkedAlt, FaCopy, FaHandHoldingHeart,
 } from 'react-icons/fa'
+import { SUPPORT_PLATFORMS } from '@/lib/supportPlatforms'
 import { healthLabel, isBrokenStatus } from '@/lib/linkHealth'
 import { SiTelegram } from 'react-icons/si'
 import ScheduleStatus from '@/components/ScheduleStatus'
@@ -89,6 +90,7 @@ type Field = 'url' | 'urlOptional' | 'icon' | 'thumbnail' | 'featured' | 'passwo
 const linkTypes: Array<{ value: string; label: string; icon: string; description: string; group: string; fields: Field[] }> = [
   { value: 'link', label: 'Normal Link', icon: 'FaLink', description: 'Başka sayfaya yönlendir', group: 'Linkler', fields: ['url', 'description', 'icon', 'thumbnail', 'featured', 'password', 'slug'] },
   { value: 'contact', label: 'Bana Ulaşın', icon: 'FaEnvelope', description: 'İletişim formu aç', group: 'Linkler', fields: ['icon', 'featured'] },
+  { value: 'support', label: 'Destek Ol', icon: 'FaHandHoldingHeart', description: 'Shopier, Buy Me a Coffee, Ko-fi...', group: 'Linkler', fields: ['description', 'items'] },
   { value: 'donation', label: 'Bağış Yap', icon: 'FaDonate', description: 'Bağış sayfasına git', group: 'Linkler', fields: ['url', 'description', 'icon', 'thumbnail', 'featured', 'password', 'slug'] },
   { value: 'text', label: 'Metin', icon: 'FaAlignLeft', description: 'Başlık ve paragraf', group: 'İçerik', fields: ['description'] },
   { value: 'portfolio', label: 'Portfolyo Kartı', icon: 'FaBriefcase', description: 'Görsel + açıklama', group: 'İçerik', fields: ['urlOptional', 'thumbnail', 'description', 'featured'] },
@@ -109,8 +111,15 @@ const linkTypes: Array<{ value: string; label: string; icon: string; description
 ]
 
 // Liste bloklarının satır alanları: anahtarlar sunucudaki ITEM_FIELDS (lib/links) ile aynı
-type ItemField = { key: string; label: string; placeholder: string; multiline?: boolean }
+type ItemField = { key: string; label: string; placeholder: string; multiline?: boolean; options?: Record<string, string> }
 const ITEM_FORMS: Record<string, { addLabel: string; fields: ItemField[] }> = {
+  support: {
+    addLabel: 'Platform ekle',
+    fields: [
+      { key: 'platform', label: 'Platform', placeholder: '', options: SUPPORT_PLATFORMS },
+      { key: 'url', label: 'Link', placeholder: 'https://www.buymeacoffee.com/kullanici' },
+    ],
+  },
   skills: { addLabel: 'Rozet ekle', fields: [{ key: 'label', label: 'Etiket', placeholder: 'React' }] },
   faq: {
     addLabel: 'Soru ekle',
@@ -140,7 +149,7 @@ const MAX_ITEMS = 50
 
 const TITLE_PLACEHOLDERS: Record<string, string> = {
   product: 'El yapımı seramik kupa', map: 'Atölyem',
-  text: 'Hakkımda', heading: 'Projelerim (boş bırakılırsa ince çizgi)', skills: 'Kullandığım araçlar',
+  text: 'Hakkımda', support: 'Beni destekle', heading: 'Projelerim (boş bırakılırsa ince çizgi)', skills: 'Kullandığım araçlar',
   faq: 'Sıkça sorulanlar', timeline: 'Deneyim', testimonials: 'Hakkımda söylenenler', coupon: 'Mağazamda %10 indirim',
 }
 
@@ -163,7 +172,7 @@ const PANEL_ICONS: Record<string, IconType> = {
   FaLink, FaDonate, FaPhone, FaMapMarkerAlt, FaCalendarAlt, FaFileAlt, FaMusic, FaVideo, FaGamepad, FaCamera,
   FaBook, FaHeart, FaStar, FaShoppingCart, FaUser, FaUsers, FaCode, FaCogs, FaCloud,
   FaAlignLeft, FaBriefcase, FaHourglassHalf, FaImages, FaSpotify,
-  FaHeading, FaTags, FaQuestionCircle, FaStream, FaQuoteLeft, FaTicketAlt, FaShoppingBag, FaMapMarkedAlt,
+  FaHeading, FaTags, FaQuestionCircle, FaStream, FaQuoteLeft, FaTicketAlt, FaShoppingBag, FaMapMarkedAlt, FaHandHoldingHeart,
 }
 const getIconComponent = (iconName: string): IconType => PANEL_ICONS[iconName] || FaLink
 
@@ -324,7 +333,17 @@ function ItemsEditor({ type, items, onChange }: { type: string; items: Array<Rec
           <div key={index} className={`flex gap-2 ${compact ? 'items-center' : 'items-start p-3 bg-dark-bg border border-gray-700 rounded-lg'}`}>
             <div className={`flex-1 min-w-0 ${compact ? '' : 'space-y-2'}`}>
               {config.fields.map((field) => (
-                field.multiline ? (
+                field.options ? (
+                  <SelectMenu
+                    key={field.key}
+                    ariaLabel={`${index + 1}. satır: ${field.label}`}
+                    value={item[field.key] || ''}
+                    onChange={(value) => update(index, field.key, value)}
+                    options={Object.entries(field.options).map(([value, label]) => ({ value, label }))}
+                    placeholder={`${field.label} seçin`}
+                    className={inputClass}
+                  />
+                ) : field.multiline ? (
                   <textarea key={field.key} aria-label={`${index + 1}. satır: ${field.label}`} value={item[field.key] || ''} onChange={(e) => update(index, field.key, e.target.value)} rows={2} className={`${inputClass} resize-y`} placeholder={`${field.label}: ${field.placeholder}`} />
                 ) : (
                   <input key={field.key} type="text" aria-label={`${index + 1}. satır: ${field.label}`} value={item[field.key] || ''} onChange={(e) => update(index, field.key, e.target.value)} className={inputClass} placeholder={compact ? field.placeholder : `${field.label}: ${field.placeholder}`} />
@@ -417,7 +436,7 @@ function LinkFormFields({ form, setForm, mode }: { form: FormData; setForm: (f: 
 
       {has('description') && (
         <div>
-          <label className={labelClass}>{form.type === 'text' ? 'Metin' : form.type === 'coupon' ? 'Kupon kodu' : form.type === 'heading' ? 'Alt yazı (opsiyonel)' : form.type === 'map' ? 'Adres (opsiyonel)' : has('url') ? 'Kısa açıklama (opsiyonel)' : 'Açıklama'}</label>
+          <label className={labelClass}>{form.type === 'text' ? 'Metin' : form.type === 'coupon' ? 'Kupon kodu' : form.type === 'heading' ? 'Alt yazı (opsiyonel)' : form.type === 'map' ? 'Adres (opsiyonel)' : form.type === 'support' ? 'Açıklama (opsiyonel)' : has('url') ? 'Kısa açıklama (opsiyonel)' : 'Açıklama'}</label>
           {form.type === 'coupon' ? (
             <input type="text" value={form.description} onChange={(e) => set({ description: e.target.value })} className={`${inputClass} font-mono`} placeholder="INDIRIM10" />
           ) : (
