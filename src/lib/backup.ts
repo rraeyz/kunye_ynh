@@ -3,7 +3,7 @@ import path from 'path'
 import sharp from 'sharp'
 import { prisma } from '@/lib/prisma'
 import { PROFILE_EDITABLE_FIELDS, PROFILE_SETTINGS_FIELDS, normalizeProfileCard, normalizeSettings } from '@/lib/profile'
-import { LINK_TYPES, isImageUrl, normalizeSlug, parseDate, parseImages } from '@/lib/links'
+import { LINK_TYPES, isImageUrl, normalizeSlug, parseDate, parseImages, parseItems } from '@/lib/links'
 import { isSafeUrl, isValidEmail } from '@/lib/security'
 import { FILE_NAME_PATTERN, UPLOAD_DIR } from '@/lib/uploads'
 import { BACKUP_FORMAT, BACKUP_FORMAT_VERSION, BackupKind, summarizeBackup } from '@/lib/backupFormat'
@@ -21,7 +21,9 @@ const PROFILE_BOOLEAN_FIELDS = new Set([
   'showContactButton', 'showShareButton', 'showNewsletter', 'showCategoryTabs',
   'showVCard', 'darkMode', 'verified', 'smtpSecure', 'showSocialIcons',
   'newsletterDoubleOptIn', 'autoBackupEnabled', 'weeklyReportEnabled', 'linkHealthEnabled',
+  'showViewCounter', 'maintenanceMode',
 ])
+const PROFILE_DATE_FIELDS = new Set(['announcementUntil'])
 const PROFILE_IMAGE_FIELDS = new Set(['imageUrl', 'faviconUrl', 'ogImageUrl', 'backgroundImage', 'coverImage'])
 const PROFILE_LINK_FIELDS = new Set(['linkedinUrl', 'twitterUrl', 'discordUrl', 'youtubeUrl', 'instagramUrl', 'githubUrl'])
 
@@ -66,6 +68,8 @@ export async function createBackup(kind: BackupKind) {
       description: link.description,
       images: link.images,
       targetDate: link.targetDate,
+      items: link.items,
+      price: link.price,
       // Şifre (bcrypt hash) ve tıklama sayısı yalnızca tam yedekte
       ...(kind === 'full' ? { password: link.password, clicks: link.clicks, createdAt: link.createdAt } : { hasPassword: !!link.password }),
     }))
@@ -102,9 +106,11 @@ function profileFromBackup(raw: Record<string, any>, kind: BackupKind): { data: 
   const data: Record<string, any> = {}
   for (const field of profileFieldsFor(kind)) {
     const value = raw[field]
-    if (value === undefined || value === null) continue
+    // Tarih alanında null "tarih yok" demektir ve yazılır
+    if (value === undefined || (value === null && !PROFILE_DATE_FIELDS.has(field))) continue
     if (PROFILE_INT_FIELDS.has(field)) data[field] = int(value, field === 'smtpPort' ? 587 : 0)
     else if (PROFILE_BOOLEAN_FIELDS.has(field)) data[field] = value === true || value === 'true'
+    else if (PROFILE_DATE_FIELDS.has(field)) data[field] = parseDate(value) ?? null
     else data[field] = str(value, 20_000)
   }
   // Adresler denetlenir: görseller yalnızca yüklenen dosya, http(s) ya da data:image; linkler http(s)/mailto/tel
@@ -112,6 +118,7 @@ function profileFromBackup(raw: Record<string, any>, kind: BackupKind): { data: 
     const value = data[field]
     if (value && !isImageUrl(value) && !/^data:image\//.test(value) && value !== '/default-avatar.jpg') data[field] = ''
   }
+  if (data.announcementUrl && !isSafeUrl(data.announcementUrl)) data.announcementUrl = ''
   for (const field of Array.from(PROFILE_LINK_FIELDS)) {
     if (data[field] && !isSafeUrl(data[field])) data[field] = ''
   }
@@ -145,6 +152,8 @@ function linkFromBackup(raw: Record<string, any>, kind: BackupKind) {
     description: str(raw.description, 5000),
     images: images.length ? JSON.stringify(images) : '',
     targetDate: parseDate(raw.targetDate) ?? null,
+    items: (() => { const items = parseItems(String(raw.type), raw.items); return items.length ? JSON.stringify(items) : '' })(),
+    price: str(raw.price, 100),
     // Şifreler yalnızca tam yedekten gelir (geçerli bir bcrypt hash ise)
     password: kind === 'full' && isBcryptHash(raw.password) ? raw.password : '',
     clicks: kind === 'full' ? Math.max(0, int(raw.clicks)) : 0,

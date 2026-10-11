@@ -33,6 +33,15 @@ export default function ProfileEditor({ initialProfile }: ProfileEditorProps) {
   const [showShareButton, setShowShareButton] = useState<boolean>(initialProfile?.showShareButton ?? true)
   const [showNewsletter, setShowNewsletter] = useState<boolean>(initialProfile?.showNewsletter ?? true)
   const [showCategoryTabs, setShowCategoryTabs] = useState<boolean>(initialProfile?.showCategoryTabs ?? true)
+  const [showViewCounter, setShowViewCounter] = useState<boolean>(initialProfile?.showViewCounter ?? false)
+  // "Bu hafta / şu an" duyurusu
+  const [announcementText, setAnnouncementText] = useState(initialProfile?.announcementText || '')
+  const [announcementUrl, setAnnouncementUrl] = useState(initialProfile?.announcementUrl || '')
+  const [announcementUntil, setAnnouncementUntil] = useState(() => {
+    if (!initialProfile?.announcementUntil) return ''
+    const date = new Date(initialProfile.announcementUntil)
+    return new Date(date.getTime() - date.getTimezoneOffset() * 60_000).toISOString().slice(0, 16)
+  })
   // Sosyal medya hesapları (sitedeki ikonlar ve e-posta imzası)
   const [socials, setSocials] = useState({
     instagramUrl: initialProfile?.instagramUrl || '',
@@ -81,6 +90,10 @@ export default function ProfileEditor({ initialProfile }: ProfileEditorProps) {
           showShareButton,
           showNewsletter,
           showCategoryTabs,
+          showViewCounter,
+          announcementText,
+          announcementUrl,
+          announcementUntil: announcementUntil ? new Date(announcementUntil).toISOString() : null,
           ...socials,
           showSocialIcons,
         }),
@@ -261,6 +274,7 @@ export default function ProfileEditor({ initialProfile }: ProfileEditorProps) {
                 [showShareButton, setShowShareButton, 'Paylaş butonu', 'Sayfa linkini paylaşır ya da kopyalar.'],
                 [showNewsletter, setShowNewsletter, 'Bülten kutusu', 'Ziyaretçiler e-postasıyla abone olur (Aboneler bölümüne düşer).'],
                 [showCategoryTabs, setShowCategoryTabs, 'Kategori sekmeleri', 'Bloklarda en az 2 farklı kategori varsa üstte Tümü / kategori sekmeleri çıkar.'],
+                [showViewCounter, setShowViewCounter, 'Ziyaretçi sayacı', 'Sayfanın en altında toplam görüntülenme sayısı görünür.'],
               ] as Array<[boolean, (value: boolean) => void, string, string]>).map(([checked, setChecked, label, hint]) => (
                 <label key={label} className="flex items-start gap-3 p-4 bg-dark-bg border border-gray-700 rounded-xl cursor-pointer">
                   <input type="checkbox" checked={checked} onChange={(e) => setChecked(e.target.checked)} className="mt-1 w-4 h-4 accent-purple-500" />
@@ -272,6 +286,28 @@ export default function ProfileEditor({ initialProfile }: ProfileEditorProps) {
               ))}
             </div>
             <p className="text-xs text-gray-500">&quot;Rehbere ekle&quot; butonu aşağıdaki İletişim Bilgileri bölümünden açılır.</p>
+          </div>
+        </div>
+
+        {/* Duyuru */}
+        <div className="pt-6 border-t border-gray-700">
+          <h3 className="text-lg font-semibold text-white">Duyuru (&quot;bu hafta / şu an&quot;)</h3>
+          <p className="text-sm text-gray-400 mt-1 mb-4">Blokların en üstünde vurgulu bir şerit olarak görünür. Bitiş zamanı geçince kendiliğinden kaybolur. Boş bırakırsan gösterilmez.</p>
+          <div className="space-y-4">
+            <div>
+              <label htmlFor="announcementText" className="block text-sm font-medium text-gray-300 mb-2">Duyuru metni</label>
+              <input id="announcementText" type="text" maxLength={200} value={announcementText} onChange={(e) => setAnnouncementText(e.target.value)} placeholder="ör. Yeni videom yayında!" className="w-full px-4 py-3 bg-dark-bg border border-gray-700 rounded-xl text-white focus:outline-none focus:border-purple-500" />
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label htmlFor="announcementUrl" className="block text-sm font-medium text-gray-300 mb-2">Link (opsiyonel)</label>
+                <input id="announcementUrl" type="url" value={announcementUrl} onChange={(e) => setAnnouncementUrl(e.target.value)} placeholder="https://..." className="w-full px-4 py-3 bg-dark-bg border border-gray-700 rounded-xl text-white focus:outline-none focus:border-purple-500" />
+              </div>
+              <div>
+                <label htmlFor="announcementUntil" className="block text-sm font-medium text-gray-300 mb-2">Bitiş (opsiyonel)</label>
+                <input id="announcementUntil" type="datetime-local" value={announcementUntil} onChange={(e) => setAnnouncementUntil(e.target.value)} className="w-full px-4 py-3 bg-dark-bg border border-gray-700 rounded-xl text-white focus:outline-none focus:border-purple-500" />
+              </div>
+            </div>
           </div>
         </div>
 

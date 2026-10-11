@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import { FaEnvelope, FaTrash, FaDownload, FaSearch, FaUserPlus, FaPaperPlane } from 'react-icons/fa'
 import RichTextEditor from './RichTextEditor'
 import { CSV_BOM, csvRow } from '@/lib/csv'
+import AutoEmailSettings from './AutoEmailSettings'
 
 export default function SubscriberManagement() {
   const [subscribers, setSubscribers] = useState<any[]>([])
@@ -217,6 +218,17 @@ export default function SubscriberManagement() {
           )}
           {optInMessage && <p className="text-sm text-red-400 mt-1">{optInMessage}</p>}
         </div>
+      </div>
+
+      <div className="mb-6">
+        <AutoEmailSettings
+          title="Hoş geldin e-postası"
+          description="Yeni abone listeye girdiği anda (e-posta onayı açıksa onayladıktan sonra) bu e-posta gider. Abonelikten çıkma linki otomatik eklenir."
+          bodyKey="welcomeEmailBody"
+          subjectKey="welcomeEmailSubject"
+          subjectPlaceholder="Konu: Bültene hoş geldin!"
+          bodyPlaceholder="Merhaba! Abone olduğun için teşekkürler. Ayda bir yeni projelerimi paylaşacağım."
+        />
       </div>
 
       {/* Search */}

@@ -74,7 +74,7 @@ export async function checkLinkHealth(): Promise<number> {
   const results: Array<{ id: number; status: number }> = []
   for (const link of links) {
     // Gömmeler ve iletişim/metin blokları kendi servislerine bağlı; yalnızca ziyaretçinin gideceği adresler
-    if (link.type.startsWith('embed-') || link.type === 'spotify' || !isSafeUrl(link.url) || !/^https?:/i.test(link.url)) continue
+    if (link.type.startsWith('embed-') || link.type === 'spotify' || link.type === 'map' || !isSafeUrl(link.url) || !/^https?:/i.test(link.url)) continue
     results.push({ id: link.id, status: await checkUrlStatus(link.url) })
   }
   // Hiçbir adrese ulaşılamadıysa sorun büyük olasılıkla sunucunun internet bağlantısındadır (proxy, güvenlik

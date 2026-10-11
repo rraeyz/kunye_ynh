@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { isValidConfirmToken } from '@/lib/unsubscribe'
 import { notifyAdmin } from '@/lib/notify'
+import { inBackground, sendWelcomeEmail } from '@/lib/autoMail'
+import { getBaseUrl } from '@/lib/url'
 
 export const dynamic = 'force-dynamic'
 
@@ -22,6 +24,7 @@ export async function POST(request: NextRequest) {
   if (!subscriber.confirmed) {
     await prisma.subscriber.update({ where: { email }, data: { confirmed: true } })
     notifyAdmin('Yeni bülten abonesi', [subscriber.name, email].filter(Boolean).join(' · '))
+    inBackground(sendWelcomeEmail(email, getBaseUrl(request.headers)), 'Hoş geldin e-postası')
   }
   return NextResponse.json({ success: true })
 }

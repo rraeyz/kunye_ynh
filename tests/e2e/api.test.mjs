@@ -608,6 +608,148 @@ test('paylaşım görseli, yapısal veri ve içerik güvenlik politikası', asyn
   assert.ok(csp.includes("object-src 'none'") && csp.includes("frame-ancestors 'self'"))
 })
 
+test('liste blokları: başlık, rozetler, SSS, zaman çizelgesi, referanslar, kupon', async () => {
+  const add = (body) => req('/api/links', { method: 'POST', cookie: admin, body })
+  const created = []
+  const make = async (body) => {
+    const res = await add(body)
+    assert.equal(res.status, 200, `${body.type}: ${JSON.stringify(res.data)}`)
+    created.push(res.data.id)
+    return res.data
+  }
+  await make({ type: 'heading', title: 'Bölüm Bir', description: 'Alt yazı burada' })
+  await make({ type: 'heading', title: '' }) // başlıksız: ayırıcı çizgi
+  const skills = await make({ type: 'skills', title: 'Araçlar', items: [{ label: 'TypeScript' }, { label: '' }, { label: 'Figma', kotu: 'x' }] })
+  assert.deepEqual(JSON.parse(skills.items), [{ label: 'TypeScript' }, { label: 'Figma' }], 'boş satırlar ve bilinmeyen alanlar atılmalı')
+  await make({ type: 'faq', title: 'SSS', items: [{ q: 'Ders veriyor musun?', a: 'Evet <b>bazen</b>' }] })
+  await make({ type: 'timeline', title: 'Deneyim', items: [{ date: '2021 – 2024', title: 'Geliştirici', text: 'Örnek A.Ş.' }] })
+  await make({ type: 'testimonials', title: 'Referanslar', items: [{ quote: 'Harika iş', name: 'Ayşe', role: 'Müdür' }] })
+  await make({ type: 'coupon', title: 'İndirim', description: 'KUPON10', url: 'https://example.com/magaza' })
+  assert.equal((await add({ type: 'coupon', title: 'Kötü', description: 'X', url: 'javascript:alert(1)' })).status, 400)
+  assert.equal((await add({ type: 'skills', title: 'Çok', items: Array.from({ length: 51 }, (_, i) => ({ label: `e${i}` })) })).status, 400)
+  const empty = await make({ type: 'faq', title: 'Boş SSS', items: [] })
+
+  const home = (await req('/', { json: false })).text
+  for (const text of ['Bölüm Bir', 'Alt yazı burada', 'TypeScript', 'Figma', 'Ders veriyor musun?', '2021 – 2024', 'Harika iş', 'KUPON10', '<hr']) {
+    assert.ok(home.includes(text), `ana sayfada olmalı: ${text}`)
+  }
+  assert.ok(home.includes('Evet &lt;b&gt;bazen&lt;/b&gt;'), 'satır metni HTML olarak çalışmamalı')
+  assert.ok(!home.includes('Boş SSS'), 'satırı olmayan blok çizilmemeli')
+
+  // Yedek blok satırlarını korur
+  const settings = (await req('/api/admin/backup?kind=settings', { cookie: admin })).data
+  assert.deepEqual(JSON.parse(settings.links.find((l) => l.id === skills.id).items), [{ label: 'TypeScript' }, { label: 'Figma' }])
+
+  // Düzenleme: yalnızca satırlar değişir
+  const edit = await req(`/api/links/${skills.id}`, { method: 'PUT', cookie: admin, body: { items: [{ label: 'Rust' }] } })
+  assert.equal(edit.status, 200)
+  assert.deepEqual(JSON.parse(edit.data.items), [{ label: 'Rust' }])
+
+  for (const id of created) await req(`/api/links/${id}`, { method: 'DELETE', cookie: admin })
+  assert.ok(!(await req('/', { json: false })).text.includes('Bölüm Bir'))
+  assert.ok(empty.id)
+})
+
+test('ürün kartı ve harita', async () => {
+  const add = (body) => req('/api/links', { method: 'POST', cookie: admin, body })
+  const product = await add({ type: 'product', title: 'Seramik Kupa', price: '₺250', description: 'El yapımı', url: 'https://example.com/kupa' })
+  assert.equal(product.status, 200, JSON.stringify(product.data))
+  assert.equal(product.data.price, '₺250')
+
+  assert.equal((await add({ type: 'map', title: 'Kötü', url: 'https://maps.app.goo.gl/abc' })).status, 400, 'koordinatsız kısa link reddedilmeli')
+  assert.equal((await add({ type: 'map', title: 'Boş' })).status, 400)
+  const fromCoords = await add({ type: 'map', title: 'Atölye', url: '41.0082, 28.9784', description: 'Fatih, İstanbul' })
+  assert.equal(fromCoords.status, 200, JSON.stringify(fromCoords.data))
+  assert.ok(fromCoords.data.url.startsWith('https://www.openstreetmap.org/?mlat=41.0082&mlon=28.9784'), 'koordinat açılabilir linke çevrilmeli')
+  const fromGoogle = await add({ type: 'map', title: 'Kule', url: 'https://www.google.com/maps/place/X/@41.0256,28.9741,17z/data=!3d41.0256424!4d28.9741505' })
+  assert.equal(fromGoogle.status, 200)
+
+  const res = await fetch(B + '/')
+  const home = await res.text()
+  for (const text of ['Seramik Kupa', '₺250', 'Satın al', 'Fatih, İstanbul', 'openstreetmap.org/export/embed.html', 'marker=41.0082,28.9784', 'marker=41.0256424,28.9741505']) {
+    assert.ok(home.includes(text), `ana sayfada olmalı: ${text}`)
+  }
+  assert.ok((res.headers.get('content-security-policy') || '').includes('https://www.openstreetmap.org'), 'CSP harita gömmesine izin vermeli')
+  for (const item of [product, fromCoords, fromGoogle]) await req(`/api/links/${item.data.id}`, { method: 'DELETE', cookie: admin })
+})
+
+test('duyuru, ziyaretçi sayacı ve bakım modu', async () => {
+  const put = (body) => req('/api/profile', { method: 'PUT', cookie: admin, body })
+  const home = async (cookie) => (await req('/', { json: false, cookie })).text
+
+  assert.equal((await put({ announcementText: 'Kötü', announcementUrl: 'javascript:alert(1)' })).status, 400)
+  assert.equal((await put({ announcementText: 'Yeni videom yayında!', announcementUrl: 'https://example.com/video', announcementUntil: new Date(Date.now() + 86_400_000).toISOString() })).status, 200)
+  let html = await home()
+  assert.ok(html.includes('Yeni videom yayında!') && html.includes('https://example.com/video'))
+  assert.equal((await put({ announcementUntil: new Date(Date.now() - 60_000).toISOString() })).status, 200)
+  assert.ok(!(await home()).includes('Yeni videom yayında!'), 'bitiş zamanı geçen duyuru görünmemeli')
+  await put({ announcementText: '', announcementUrl: '', announcementUntil: null })
+
+  // Sayaç: kapalıyken görünmez; açıkken toplam görüntülenme yazılır ve her ziyaretle artar
+  assert.ok(!(await home()).includes('görüntülenme</span>'))
+  assert.equal((await put({ showViewCounter: true })).status, 200)
+  const count = () => home().then((h) => parseInt((h.match(/· ([\d.]+) görüntülenme/) || [])[1]?.replace(/\./g, '') || 'NaN'))
+  const before = await count()
+  assert.ok(Number.isInteger(before), 'sayaç görünmeli')
+  const ua = { 'user-agent': 'Mozilla/5.0 (Windows NT 10.0) Chrome/120.0 Safari/537.36' }
+  assert.equal((await req('/api/views', { method: 'POST', headers: { ...ua, ...ip(140) }, body: {} })).data.recorded, true)
+  assert.equal(await count(), before + 1)
+  await put({ showViewCounter: false })
+
+  // Bakım modu: ziyaretçi yalnızca mesajı görür, admin siteyi normal görür
+  assert.equal((await put({ maintenanceMode: true, maintenanceMessage: 'Yarın döneceğim.' })).status, 200)
+  try {
+    html = await home()
+    assert.ok(html.includes('Yarın döneceğim.'), 'bakım mesajı görünmeli')
+    assert.ok(!html.includes('page-blocks'), 'bloklar ziyaretçiye görünmemeli')
+    const adminHtml = await home(admin)
+    assert.ok(adminHtml.includes('page-blocks') && adminHtml.includes('Bakım modu açık'))
+    assert.equal((await req('/api/admin/overview', { cookie: admin })).data.status.maintenance, true)
+  } finally {
+    assert.equal((await put({ maintenanceMode: false })).status, 200)
+  }
+  html = await home()
+  assert.ok(html.includes('page-blocks') && !html.includes('Yarın döneceğim.'), 'kapatınca site hemen açılmalı')
+  // Bakım modu ayardır: geri al listesine girmez
+  assert.notEqual((await req('/api/admin/revisions', { cookie: admin })).data.undo?.label, 'Bakım modu')
+})
+
+test('otomatik yanıt ve hoş geldin e-postası ayarları', async () => {
+  const put = (body) => req('/api/profile', { method: 'PUT', cookie: admin, body })
+  const saved = await put({ contactAutoReply: 'Mesajını aldım.', welcomeEmailSubject: 'Hoş\ngeldin', welcomeEmailBody: 'Teşekkürler!' })
+  assert.equal(saved.status, 200)
+  assert.equal(saved.data.contactAutoReply, 'Mesajını aldım.')
+  assert.equal(saved.data.welcomeEmailSubject, 'Hoş geldin', 'konuda satır sonu olmamalı (başlık enjeksiyonu)')
+  // SMTP yokken form ve abonelik yine çalışır (e-posta sessizce atlanır)
+  await put({ contactEmail: 'ben@example.com' })
+  assert.equal((await req('/api/contact', { method: 'POST', headers: ip(150), body: { name: 'A', email: 'a@example.com', message: 'm' } })).status, 200)
+  assert.equal((await req('/api/subscribe', { method: 'POST', headers: ip(151), body: { email: 'hosgeldin@example.com' } })).status, 200)
+  // Ayarlar sayfa içeriği değildir, profil yedeğine ve geri ala girmez
+  assert.equal((await req('/api/admin/backup?kind=profile', { cookie: admin })).data.profile.contactAutoReply, undefined)
+  await put({ contactEmail: '', contactAutoReply: '', welcomeEmailSubject: '', welcomeEmailBody: '' })
+})
+
+test('blok kopyalama', async () => {
+  const links = (await req('/api/links', { cookie: admin })).data
+  const source = links.find((l) => l.password) // şifreli blok: koruma kopyaya geçmeli
+  assert.ok(source)
+  await req(`/api/links/${source.id}`, { method: 'PUT', cookie: admin, body: { slug: 'kopya-test' } })
+  assert.equal((await req(`/api/links/${source.id}/duplicate`, { method: 'POST' })).status, 401)
+  assert.equal((await req('/api/links/999999/duplicate', { method: 'POST', cookie: admin })).status, 404)
+  const copy = await req(`/api/links/${source.id}/duplicate`, { method: 'POST', cookie: admin })
+  assert.equal(copy.status, 200, JSON.stringify(copy.data))
+  assert.equal(copy.data.title, `${source.title} (kopya)`)
+  assert.equal(copy.data.slug, '', 'kısa link kopyalanmamalı')
+  assert.equal(copy.data.clicks, 0)
+  assert.ok(copy.data.password, 'şifre koruması kopyalanmalı')
+  const after = (await req('/api/links', { cookie: admin })).data
+  const index = after.findIndex((l) => l.id === source.id)
+  assert.equal(after[index + 1].id, copy.data.id, 'kopya hemen altında olmalı')
+  assert.equal((await req('/api/admin/revisions', { cookie: admin })).data.undo.label, `"${source.title}" kopyalandı`)
+  await req(`/api/links/${copy.data.id}`, { method: 'DELETE', cookie: admin })
+  await req(`/api/links/${source.id}`, { method: 'PUT', cookie: admin, body: { slug: '' } })
+})
+
 test('giriş rate limit: sadece hatalı denemeler sayılır', async () => {
   for (let i = 0; i < 12; i++) {
     assert.equal((await req('/api/auth/login', { method: 'POST', headers: ip(40), body: { username: 'admin', password: PASSWORD } })).status, 200)

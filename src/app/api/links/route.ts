@@ -32,7 +32,8 @@ export async function POST(request: Request) {
     const body = await request.json()
 
     const type = String(body.type || 'link')
-    if (!body.title) {
+    // Bölüm başlığı boş bırakılırsa ayırıcı çizgi olur
+    if (!body.title && type !== 'heading') {
       return NextResponse.json({ error: 'Başlık gerekli' }, { status: 400 })
     }
     if (isUrlRequired(type) && !body.url) {
@@ -44,7 +45,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: result.error }, { status: 400 })
     }
 
-    const link = await withRevision(`"${result.data.title}" eklendi`, async () => {
+    const link = await withRevision(`"${result.data.title || 'Ayırıcı'}" eklendi`, async () => {
       // En yüksek order değerini bul
       const maxOrderLink = await prisma.link.findFirst({
         orderBy: { order: 'desc' },

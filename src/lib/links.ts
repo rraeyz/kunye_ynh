@@ -6,12 +6,45 @@ export const LINK_TYPES = [
   'link', 'contact', 'donation',
   'embed-youtube', 'embed-twitter', 'embed-instagram',
   'text', 'gallery', 'spotify', 'countdown', 'portfolio',
+  'heading', 'skills', 'coupon', 'testimonials', 'faq', 'timeline',
+  'product', 'map',
 ] as const
 
+// Liste bloklarının satır alanları (Link.items, JSON dizi). Panel formu ve sayfa da buradan okur.
+export const ITEM_FIELDS: Record<string, readonly string[]> = {
+  skills: ['label'],
+  testimonials: ['quote', 'name', 'role'],
+  faq: ['q', 'a'],
+  timeline: ['date', 'title', 'text'],
+}
+const MAX_ITEMS = 50
+
+export type BlockItem = Record<string, string>
+
+// Kayıtlı JSON'dan güvenli satırlar: yalnızca bilinen alanlar, metin, boş satırlar atılır
+export function parseItems(type: string, value: unknown): BlockItem[] {
+  const fields = ITEM_FIELDS[type]
+  if (!fields) return []
+  let raw: unknown = value
+  if (typeof value === 'string') {
+    try {
+      raw = JSON.parse(value || '[]')
+    } catch {
+      return []
+    }
+  }
+  if (!Array.isArray(raw)) return []
+  return raw
+    .filter((item) => item && typeof item === 'object')
+    .map((item) => Object.fromEntries(fields.map((field) => [field, String((item as any)[field] ?? '').trim().slice(0, 2000)])))
+    .filter((item) => Object.values(item).some(Boolean))
+    .slice(0, MAX_ITEMS)
+}
+
 // URL'si zorunlu ve gerçekten açılan tipler (contact'ta url alanı sadece başlıktır)
-const URL_REQUIRED_TYPES = new Set(['link', 'donation', 'embed-youtube', 'embed-twitter', 'embed-instagram', 'spotify'])
+const URL_REQUIRED_TYPES = new Set(['link', 'donation', 'embed-youtube', 'embed-twitter', 'embed-instagram', 'spotify', 'map'])
 // URL'si isteğe bağlı ama verilirse güvenli olması gereken tipler
-const URL_OPTIONAL_TYPES = new Set(['portfolio', 'countdown'])
+const URL_OPTIONAL_TYPES = new Set(['portfolio', 'countdown', 'coupon', 'product'])
 
 export function requiresSafeUrl(type: string | undefined): boolean {
   return URL_REQUIRED_TYPES.has(type || 'link')
@@ -32,6 +65,31 @@ export function spotifyEmbedUrl(url: string): string | null {
     return null
   }
 }
+
+// Harita bloğu: Google Maps / OpenStreetMap linkinden ya da "41.0082, 28.9784" yazısından koordinat okur.
+// API anahtarı gerekmez. Kısa linklerde (maps.app.goo.gl) koordinat olmadığı için null döner.
+export function parseMapLocation(value: string): { lat: number; lon: number } | null {
+  const text = decodeURIComponent(String(value || '').trim())
+  const patterns = [
+    /^(-?\d{1,2}(?:\.\d+)?)\s*,\s*(-?\d{1,3}(?:\.\d+)?)$/, // 41.0082, 28.9784
+    /!3d(-?\d+\.\d+)!4d(-?\d+\.\d+)/, // Google: işaretli yer
+    /@(-?\d+\.\d+),(-?\d+\.\d+)/, // Google: harita merkezi
+    /[?&](?:q|query|ll|destination)=(-?\d+\.\d+),\s*(-?\d+\.\d+)/, // Google: ?q=lat,lon
+    /mlat=(-?\d+\.\d+)&mlon=(-?\d+\.\d+)/, // OpenStreetMap işaret
+    /#map=\d+\/(-?\d+\.\d+)\/(-?\d+\.\d+)/, // OpenStreetMap görünüm
+  ]
+  for (const pattern of patterns) {
+    const match = text.match(pattern)
+    if (!match) continue
+    const lat = parseFloat(match[1])
+    const lon = parseFloat(match[2])
+    if (Math.abs(lat) <= 90 && Math.abs(lon) <= 180) return { lat, lon }
+  }
+  return null
+}
+
+export const osmUrl = ({ lat, lon }: { lat: number; lon: number }) =>
+  `https://www.openstreetmap.org/?mlat=${lat}&mlon=${lon}#map=16/${lat}/${lon}`
 
 // Görsel adresi: sadece yüklenen dosyalar (/media/...) veya http(s)
 export function isImageUrl(value: unknown): value is string {
@@ -93,6 +151,12 @@ export async function buildLinkData(
     data.thumbnail = thumbnail
   }
 
+  if (body.items !== undefined) {
+    const items = parseItems(type, body.items)
+    if (Array.isArray(body.items) && body.items.length > MAX_ITEMS) return { error: `En fazla ${MAX_ITEMS} satır eklenebilir` }
+    data.items = items.length ? JSON.stringify(items) : ''
+  }
+
   if (body.images !== undefined) {
     const images = Array.isArray(body.images) ? body.images : []
     if (images.length > 24) return { error: 'Galeride en fazla 24 görsel olabilir' }
@@ -107,8 +171,18 @@ export async function buildLinkData(
   const targetDate = parseDate(body.targetDate)
   if (targetDate !== undefined) data.targetDate = targetDate
 
+  if (body.price !== undefined) data.price = String(body.price || '').trim().slice(0, 50)
+
   if (body.url !== undefined) {
-    const url = String(body.url).trim()
+    let url = String(body.url).trim()
+    if (type === 'map') {
+      const location = parseMapLocation(url)
+      if (!location) {
+        return { error: 'Konum okunamadı. Google Maps\'te yeri açıp adres çubuğundaki uzun linki yapıştırın ya da "41.0082, 28.9784" gibi enlem, boylam yazın (kısa maps.app.goo.gl linklerinde konum bulunmaz).' }
+      }
+      // Yalnızca koordinat yazıldıysa açılabilir bir harita linkine çevrilir
+      if (!isSafeUrl(url)) url = osmUrl(location)
+    }
     if (requiresSafeUrl(type) && !isSafeUrl(url)) {
       return { error: 'Geçersiz URL. Sadece http(s), mailto ve tel linkleri kabul edilir.' }
     }

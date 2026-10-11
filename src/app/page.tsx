@@ -16,12 +16,22 @@ import GalleryBlock from '@/components/blocks/GalleryBlock'
 import SpotifyBlock from '@/components/blocks/SpotifyBlock'
 import CountdownBlock from '@/components/blocks/CountdownBlock'
 import PortfolioCard from '@/components/blocks/PortfolioCard'
-import { parseImages, spotifyEmbedUrl } from '@/lib/links'
+import HeadingBlock from '@/components/blocks/HeadingBlock'
+import SkillsBlock from '@/components/blocks/SkillsBlock'
+import TestimonialsBlock from '@/components/blocks/TestimonialsBlock'
+import FaqBlock from '@/components/blocks/FaqBlock'
+import TimelineBlock from '@/components/blocks/TimelineBlock'
+import CouponBlock from '@/components/blocks/CouponBlock'
+import MapBlock from '@/components/blocks/MapBlock'
+import { ITEM_FIELDS, parseImages, parseItems, parseMapLocation, spotifyEmbedUrl } from '@/lib/links'
 import { isSafeUrl } from '@/lib/security'
 import { renderLinkIcon } from '@/lib/linkIcon'
 import { hasInlineImages, migrateInlineImages } from '@/lib/uploads'
 import { redirect } from 'next/navigation'
-import { isSetupComplete } from '@/lib/auth'
+import { isAuthenticated, isSetupComplete } from '@/lib/auth'
+import { getViewCount } from '@/lib/analytics'
+import MaintenancePage from '@/components/site/MaintenancePage'
+import AnnouncementBar from '@/components/site/AnnouncementBar'
 import { getSiteData, revalidateSite } from '@/lib/site'
 import { getBaseUrl, toAbsoluteUrl } from '@/lib/url'
 import { headers } from 'next/headers'
@@ -65,8 +75,16 @@ export default async function Home({ searchParams }: { searchParams?: { link?: s
     profile = { ...profile, ...updates }
   }
 
+  // Bakım modu: ziyaretçi yalnızca bakım mesajını görür; admin siteyi normal görür (üstte uyarıyla)
+  const isAdmin = profile.maintenanceMode ? await isAuthenticated() : false
+  if (profile.maintenanceMode && !isAdmin) return <MaintenancePage profile={profile} />
+
   // Tarih kontrolü - sadece aktif scheduled links göster
   const now = new Date()
+  const announcement = profile.announcementText && !(profile.announcementUntil && new Date(profile.announcementUntil) < now)
+    ? { text: profile.announcementText, url: isSafeUrl(profile.announcementUrl) ? profile.announcementUrl : '' }
+    : null
+  const viewCount = profile.showViewCounter ? await getViewCount() : null
   const links = siteData.links.map((link) => ({
     ...link,
     // Son savunma hattı: http(s)/mailto/tel dışındaki adresler (ör. javascript:) sayfaya hiç çıkmaz
@@ -91,7 +109,11 @@ export default async function Home({ searchParams }: { searchParams?: { link?: s
       case 'gallery': return parseImages(link.images).length > 0
       case 'spotify': return !!spotifyEmbedUrl(link.url)
       case 'countdown': return !!link.targetDate
-      default: return true
+      case 'coupon': return !!link.description?.trim()
+      case 'map': return !!parseMapLocation(link.url)
+      // Ayırıcı başlıksız da olabilir (yalnızca çizgi)
+      case 'heading': return true
+      default: return ITEM_FIELDS[link.type] ? parseItems(link.type, link.items).length > 0 : true
     }
   }
   const visibleLinks = links.filter(hasContent)
@@ -123,9 +145,16 @@ export default async function Home({ searchParams }: { searchParams?: { link?: s
             url={link.url}
           />
         ) : null
+      case 'map': {
+        const location = parseMapLocation(link.url)
+        return location ? <MapBlock title={link.title} address={link.description} lat={location.lat} lon={location.lon} url={link.url} /> : null
+      }
+      case 'product':
       case 'portfolio':
         return (
           <PortfolioCard
+            price={link.price}
+            product={link.type === 'product'}
             linkId={link.id}
             title={link.title}
             description={link.description}
@@ -134,6 +163,18 @@ export default async function Home({ searchParams }: { searchParams?: { link?: s
             featured={link.featured}
           />
         )
+      case 'heading':
+        return <HeadingBlock title={link.title} text={link.description} />
+      case 'skills':
+        return <SkillsBlock title={link.title} items={parseItems('skills', link.items)} />
+      case 'testimonials':
+        return <TestimonialsBlock title={link.title} items={parseItems('testimonials', link.items)} />
+      case 'faq':
+        return <FaqBlock title={link.title} items={parseItems('faq', link.items)} />
+      case 'timeline':
+        return <TimelineBlock title={link.title} items={parseItems('timeline', link.items)} />
+      case 'coupon':
+        return <CouponBlock linkId={link.id} title={link.title} code={link.description.trim()} url={link.url} />
       case 'embed-youtube':
       case 'embed-twitter':
       case 'embed-instagram':
@@ -199,6 +240,11 @@ export default async function Home({ searchParams }: { searchParams?: { link?: s
   return (
     <MotionProvider>
     <main className="min-h-screen relative">
+      {profile.maintenanceMode && (
+        <div role="status" className="relative z-20 bg-amber-400 text-black text-sm text-center py-2 px-4">
+          Bakım modu açık: ziyaretçiler yalnızca bakım mesajını görüyor. Sen admin olduğun için siteyi normal görüyorsun.
+        </div>
+      )}
       {/* "<" kaçışlanır: profil metni script etiketini kapatamasın */}
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd).replace(/</g, '\\u003c') }} />
       <ThemeScript />
@@ -246,6 +292,7 @@ export default async function Home({ searchParams }: { searchParams?: { link?: s
           </aside>
 
           <section id="page-blocks" aria-label="İçerik" className={`min-w-0 flex flex-col gap-3 lg:col-start-2 lg:row-start-1 lg:row-span-2 ${profile.coverImage ? 'lg:mt-20' : ''}`}>
+            {announcement && <AnnouncementBar text={announcement.text} url={announcement.url} />}
             {showTabs && <CategoryTabs categories={categories} targetId="page-blocks" />}
             {segments.map((segment) =>
               segment.kind === 'run' ? (
@@ -274,6 +321,7 @@ export default async function Home({ searchParams }: { searchParams?: { link?: s
 
         <footer className="mt-14 text-center text-sm text-dynamic-text opacity-50">
           © {new Date().getFullYear()} {profile.name}
+          {viewCount !== null && <span>{` · ${viewCount.toLocaleString('tr-TR')} görüntülenme`}</span>}
         </footer>
       </div>
     </main>

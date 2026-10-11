@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import BackupPanel from './BackupPanel'
 import SecurityPanel from './SecurityPanel'
 import AutomationPanel from './AutomationPanel'
+import MaintenanceCard from './MaintenanceCard'
 import SelectMenu from './SelectMenu'
 import { FaKey, FaSave, FaTrash, FaChartLine, FaEnvelope } from 'react-icons/fa'
 
@@ -317,6 +318,8 @@ export default function SettingsPanel() {
       </div>
 
       <SecurityPanel />
+
+      <MaintenanceCard />
 
       <BackupPanel />
 

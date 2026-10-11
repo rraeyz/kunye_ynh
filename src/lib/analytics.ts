@@ -112,6 +112,23 @@ export function referrerHost(referrer: string): string {
   }
 }
 
+// Toplam görüntülenme (sayfadaki sayaç). Analitik kayıtları silinse de düşmez; sayaç ilk kez
+// oluşturulurken mevcut görüntülenme kayıtlarından başlar.
+const VIEW_COUNTER = 'pageViews'
+
+async function incrementViewCount() {
+  const updated = await prisma.counter.updateMany({ where: { key: VIEW_COUNTER }, data: { value: { increment: 1 } } })
+  if (updated.count === 0) {
+    const existing = await prisma.pageView.count()
+    await prisma.counter.upsert({ where: { key: VIEW_COUNTER }, update: { value: { increment: 1 } }, create: { key: VIEW_COUNTER, value: existing + 1 } })
+  }
+}
+
+export async function getViewCount(): Promise<number> {
+  const counter = await prisma.counter.findUnique({ where: { key: VIEW_COUNTER } })
+  return counter?.value ?? prisma.pageView.count()
+}
+
 // Profil sayfası görüntülenmesini kaydeder (botlar hariç). Kaydedildiyse true döner.
 export async function recordPageView(
   headers: Headers,
@@ -130,6 +147,7 @@ export async function recordPageView(
     country = geoip.lookup(ip)?.country || 'Unknown'
   }
 
+  await incrementViewCount()
   await prisma.pageView.create({
     data: {
       device: result.device.type || 'desktop',

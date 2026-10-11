@@ -13,7 +13,7 @@ const contentSecurityPolicy = [
   "media-src 'self' https:",
   "connect-src 'self' https://cdn.syndication.twimg.com",
   // 'self': admin panelindeki canlı önizleme siteyi iframe'de açar
-  "frame-src 'self' https://www.youtube.com https://www.youtube-nocookie.com https://open.spotify.com https://platform.twitter.com https://syndication.twitter.com https://www.instagram.com",
+  "frame-src 'self' https://www.youtube.com https://www.youtube-nocookie.com https://open.spotify.com https://platform.twitter.com https://syndication.twitter.com https://www.instagram.com https://www.openstreetmap.org",
   "frame-ancestors 'self'",
   "object-src 'none'",
   "base-uri 'self'",
