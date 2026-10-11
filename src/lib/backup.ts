@@ -21,7 +21,9 @@ const PROFILE_BOOLEAN_FIELDS = new Set([
   'showContactButton', 'showShareButton', 'showNewsletter', 'showCategoryTabs',
   'showVCard', 'darkMode', 'verified', 'smtpSecure', 'showSocialIcons',
   'newsletterDoubleOptIn', 'autoBackupEnabled', 'weeklyReportEnabled', 'linkHealthEnabled',
+  'showViewCounter', 'maintenanceMode',
 ])
+const PROFILE_DATE_FIELDS = new Set(['announcementUntil'])
 const PROFILE_IMAGE_FIELDS = new Set(['imageUrl', 'faviconUrl', 'ogImageUrl', 'backgroundImage', 'coverImage'])
 const PROFILE_LINK_FIELDS = new Set(['linkedinUrl', 'twitterUrl', 'discordUrl', 'youtubeUrl', 'instagramUrl', 'githubUrl'])
 
@@ -104,9 +106,11 @@ function profileFromBackup(raw: Record<string, any>, kind: BackupKind): { data: 
   const data: Record<string, any> = {}
   for (const field of profileFieldsFor(kind)) {
     const value = raw[field]
-    if (value === undefined || value === null) continue
+    // Tarih alanında null "tarih yok" demektir ve yazılır
+    if (value === undefined || (value === null && !PROFILE_DATE_FIELDS.has(field))) continue
     if (PROFILE_INT_FIELDS.has(field)) data[field] = int(value, field === 'smtpPort' ? 587 : 0)
     else if (PROFILE_BOOLEAN_FIELDS.has(field)) data[field] = value === true || value === 'true'
+    else if (PROFILE_DATE_FIELDS.has(field)) data[field] = parseDate(value) ?? null
     else data[field] = str(value, 20_000)
   }
   // Adresler denetlenir: görseller yalnızca yüklenen dosya, http(s) ya da data:image; linkler http(s)/mailto/tel
@@ -114,6 +118,7 @@ function profileFromBackup(raw: Record<string, any>, kind: BackupKind): { data: 
     const value = data[field]
     if (value && !isImageUrl(value) && !/^data:image\//.test(value) && value !== '/default-avatar.jpg') data[field] = ''
   }
+  if (data.announcementUrl && !isSafeUrl(data.announcementUrl)) data.announcementUrl = ''
   for (const field of Array.from(PROFILE_LINK_FIELDS)) {
     if (data[field] && !isSafeUrl(data[field])) data[field] = ''
   }

@@ -1,3 +1,5 @@
+import { isSafeUrl } from '@/lib/security'
+
 // Profil tablosunda admin panelinden güncellenebilen alanlar.
 // Gövdeyi doğrudan Prisma'ya vermek yerine sadece bunlar kabul edilir (id, createdAt vb. değiştirilemez).
 export const PROFILE_EDITABLE_FIELDS = [
@@ -12,7 +14,9 @@ export const PROFILE_EDITABLE_FIELDS = [
   'companyName', 'companyAddress',
   'linkedinUrl', 'twitterUrl', 'discordUrl', 'youtubeUrl', 'instagramUrl', 'githubUrl', 'showSocialIcons',
   'statusText', 'location', 'timezone',
-  'showContactButton', 'showShareButton', 'showNewsletter', 'showCategoryTabs',
+  'showContactButton', 'showShareButton', 'showNewsletter', 'showCategoryTabs', 'showViewCounter',
+  'announcementText', 'announcementUrl', 'announcementUntil',
+  'maintenanceMode', 'maintenanceMessage',
   'newsletterDoubleOptIn', 'autoBackupEnabled', 'weeklyReportEnabled', 'linkHealthEnabled',
   'notifyNtfyUrl', 'notifyTelegramToken', 'notifyTelegramChatId',
 ] as const
@@ -23,15 +27,17 @@ export const PROFILE_SETTINGS_FIELDS: ReadonlySet<string> = new Set([
   'smtpHost', 'smtpPort', 'smtpUser', 'smtpPassword', 'smtpFrom', 'smtpFromName', 'smtpSecure',
   'newsletterDoubleOptIn', 'autoBackupEnabled', 'weeklyReportEnabled', 'linkHealthEnabled',
   'notifyNtfyUrl', 'notifyTelegramToken', 'notifyTelegramChatId',
+  'maintenanceMode', 'maintenanceMessage',
 ])
 
-const SETTINGS_BOOLEANS = ['newsletterDoubleOptIn', 'autoBackupEnabled', 'weeklyReportEnabled', 'linkHealthEnabled'] as const
+const SETTINGS_BOOLEANS = ['newsletterDoubleOptIn', 'autoBackupEnabled', 'weeklyReportEnabled', 'linkHealthEnabled', 'maintenanceMode'] as const
 
 // Ayarlar → Otomatik işler / Bildirimler alanlarını doğrular. Hatalıysa { error } döner.
 export function normalizeSettings(data: Record<string, any>): { error: string } | null {
   for (const key of SETTINGS_BOOLEANS) {
     if (data[key] !== undefined) data[key] = data[key] === true || data[key] === 'true'
   }
+  if (data.maintenanceMessage !== undefined) data.maintenanceMessage = String(data.maintenanceMessage ?? '').trim().slice(0, 500)
   if (data.notifyNtfyUrl !== undefined) {
     data.notifyNtfyUrl = String(data.notifyNtfyUrl ?? '').trim().slice(0, 500)
     if (data.notifyNtfyUrl && !/^https?:\/\/[^\s]+$/i.test(data.notifyNtfyUrl)) return { error: 'ntfy adresi http(s):// ile başlamalı (örnek: https://ntfy.sh/konu-adi)' }
@@ -47,7 +53,7 @@ export function normalizeSettings(data: Record<string, any>): { error: string } 
   return null
 }
 
-const PROFILE_CARD_BOOLEANS = ['showContactButton', 'showShareButton', 'showNewsletter', 'showCategoryTabs'] as const
+const PROFILE_CARD_BOOLEANS = ['showContactButton', 'showShareButton', 'showNewsletter', 'showCategoryTabs', 'showViewCounter'] as const
 
 // Geçerli bir IANA saat dilimi mi (Europe/Istanbul gibi)? Boş değer "saat gösterme" demektir.
 export function isValidTimezone(value: string): boolean {
@@ -67,6 +73,17 @@ export function normalizeProfileCard(data: Record<string, any>): { error: string
   if (data.timezone !== undefined) {
     data.timezone = String(data.timezone ?? '').trim()
     if (!isValidTimezone(data.timezone)) return { error: 'Geçersiz saat dilimi (örnek: Europe/Istanbul)' }
+  }
+  // Duyuru: metin, isteğe bağlı link (yalnızca http(s)/mailto/tel) ve bitiş tarihi
+  if (data.announcementText !== undefined) data.announcementText = String(data.announcementText ?? '').trim().slice(0, 200)
+  if (data.announcementUrl !== undefined) {
+    data.announcementUrl = String(data.announcementUrl ?? '').trim()
+    if (data.announcementUrl && !isSafeUrl(data.announcementUrl)) return { error: 'Duyuru linki geçersiz (http(s):// ile başlamalı)' }
+  }
+  if (data.announcementUntil !== undefined) {
+    const until = data.announcementUntil ? new Date(data.announcementUntil) : null
+    if (until && isNaN(until.getTime())) return { error: 'Duyuru bitiş tarihi geçersiz' }
+    data.announcementUntil = until
   }
   for (const key of PROFILE_CARD_BOOLEANS) {
     if (data[key] !== undefined) data[key] = data[key] === true || data[key] === 'true'

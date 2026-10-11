@@ -24,6 +24,7 @@ interface Overview {
     expired: number
     broken: string[]
     unreadMessages: number
+    maintenance: boolean
     version: string
   }
 }
@@ -217,6 +218,14 @@ export default function OverviewPanel({ name, onNavigate, onAddLink }: OverviewP
                   title="Yedek kaydı yok"
                   detail="YunoHost kurulumunda her gece yedek alınır. Ayarlar → Otomatik işler'den otomatik yedeği de açabilirsin."
                   action={{ label: 'Ayarlar', onClick: () => onNavigate('settings') }}
+                />
+              )}
+              {data.status.maintenance && (
+                <StatusRow
+                  tone="warn"
+                  title="Bakım modu açık"
+                  detail="Ziyaretçiler siteyi değil, bakım mesajını görüyor."
+                  action={{ label: 'Kapat', onClick: () => onNavigate('settings') }}
                 />
               )}
               {data.status.unreadMessages > 0 && (

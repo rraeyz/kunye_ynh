@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { withRevision } from '@/lib/revisions'
+import { revalidateSite } from '@/lib/site'
 import { prisma } from '@/lib/prisma'
 import { isAuthenticated } from '@/lib/auth'
 import { pick } from '@/lib/security'
@@ -46,6 +47,8 @@ export async function PUT(request: Request) {
         : prisma.profile.create({ data: { id: 1, ...data } })
     })
 
+    // Ayar alanları (ör. bakım modu) geri al kapsamında olmadığından withRevision önbelleği tazelemeyebilir
+    revalidateSite()
     return NextResponse.json(toClientProfile(profile))
   } catch (error) {
     console.error('Profile update error:', error)

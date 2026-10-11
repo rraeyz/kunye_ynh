@@ -673,6 +673,47 @@ test('ürün kartı ve harita', async () => {
   for (const item of [product, fromCoords, fromGoogle]) await req(`/api/links/${item.data.id}`, { method: 'DELETE', cookie: admin })
 })
 
+test('duyuru, ziyaretçi sayacı ve bakım modu', async () => {
+  const put = (body) => req('/api/profile', { method: 'PUT', cookie: admin, body })
+  const home = async (cookie) => (await req('/', { json: false, cookie })).text
+
+  assert.equal((await put({ announcementText: 'Kötü', announcementUrl: 'javascript:alert(1)' })).status, 400)
+  assert.equal((await put({ announcementText: 'Yeni videom yayında!', announcementUrl: 'https://example.com/video', announcementUntil: new Date(Date.now() + 86_400_000).toISOString() })).status, 200)
+  let html = await home()
+  assert.ok(html.includes('Yeni videom yayında!') && html.includes('https://example.com/video'))
+  assert.equal((await put({ announcementUntil: new Date(Date.now() - 60_000).toISOString() })).status, 200)
+  assert.ok(!(await home()).includes('Yeni videom yayında!'), 'bitiş zamanı geçen duyuru görünmemeli')
+  await put({ announcementText: '', announcementUrl: '', announcementUntil: null })
+
+  // Sayaç: kapalıyken görünmez; açıkken toplam görüntülenme yazılır ve her ziyaretle artar
+  assert.ok(!(await home()).includes('görüntülenme</span>'))
+  assert.equal((await put({ showViewCounter: true })).status, 200)
+  const count = () => home().then((h) => parseInt((h.match(/· ([\d.]+) görüntülenme/) || [])[1]?.replace(/\./g, '') || 'NaN'))
+  const before = await count()
+  assert.ok(Number.isInteger(before), 'sayaç görünmeli')
+  const ua = { 'user-agent': 'Mozilla/5.0 (Windows NT 10.0) Chrome/120.0 Safari/537.36' }
+  assert.equal((await req('/api/views', { method: 'POST', headers: { ...ua, ...ip(140) }, body: {} })).data.recorded, true)
+  assert.equal(await count(), before + 1)
+  await put({ showViewCounter: false })
+
+  // Bakım modu: ziyaretçi yalnızca mesajı görür, admin siteyi normal görür
+  assert.equal((await put({ maintenanceMode: true, maintenanceMessage: 'Yarın döneceğim.' })).status, 200)
+  try {
+    html = await home()
+    assert.ok(html.includes('Yarın döneceğim.'), 'bakım mesajı görünmeli')
+    assert.ok(!html.includes('page-blocks'), 'bloklar ziyaretçiye görünmemeli')
+    const adminHtml = await home(admin)
+    assert.ok(adminHtml.includes('page-blocks') && adminHtml.includes('Bakım modu açık'))
+    assert.equal((await req('/api/admin/overview', { cookie: admin })).data.status.maintenance, true)
+  } finally {
+    assert.equal((await put({ maintenanceMode: false })).status, 200)
+  }
+  html = await home()
+  assert.ok(html.includes('page-blocks') && !html.includes('Yarın döneceğim.'), 'kapatınca site hemen açılmalı')
+  // Bakım modu ayardır: geri al listesine girmez
+  assert.notEqual((await req('/api/admin/revisions', { cookie: admin })).data.undo?.label, 'Bakım modu')
+})
+
 test('giriş rate limit: sadece hatalı denemeler sayılır', async () => {
   for (let i = 0; i < 12; i++) {
     assert.equal((await req('/api/auth/login', { method: 'POST', headers: ip(40), body: { username: 'admin', password: PASSWORD } })).status, 200)

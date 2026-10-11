@@ -62,7 +62,7 @@ export async function GET(request: NextRequest) {
           orderBy: { _count: { linkId: 'desc' } },
           take: 5,
         }),
-        prisma.profile.findUnique({ where: { id: 1 }, select: { smtpHost: true, smtpUser: true, smtpPassword: true } }),
+        prisma.profile.findUnique({ where: { id: 1 }, select: { smtpHost: true, smtpUser: true, smtpPassword: true, maintenanceMode: true } }),
         prisma.link.findMany({ select: { id: true, title: true, enabled: true, startDate: true, endDate: true, healthStatus: true } }),
         prisma.contactMessage.count({ where: { read: false } }),
       ])
@@ -117,6 +117,7 @@ export async function GET(request: NextRequest) {
         expired: expired.length,
         broken: broken.map((link) => link.title),
         unreadMessages,
+        maintenance: !!profile?.maintenanceMode,
         version: pkg.version,
       },
     })

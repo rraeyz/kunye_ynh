@@ -25,7 +25,7 @@ export const ADMIN_NAV: AdminNavItem[] = [
   { id: 'subscribers', label: 'Aboneler', icon: FaUsers, group: 'Kitle', keywords: 'bülten abone toplu e-posta' },
   { id: 'custom-email', label: 'E-posta Gönder', icon: FaPaperPlane, group: 'Kitle', keywords: 'özel e-posta mail' },
   { id: 'qr', label: 'QR Kod', icon: FaQrcode, group: 'Araçlar', keywords: 'qr karekod' },
-  { id: 'settings', label: 'Ayarlar', icon: FaCog, group: 'Araçlar', keywords: 'şifre smtp yedek dışa aktar içe aktar oturum güvenlik iki adımlı 2fa bildirim telegram ntfy otomatik' },
+  { id: 'settings', label: 'Ayarlar', icon: FaCog, group: 'Araçlar', keywords: 'şifre smtp yedek dışa aktar içe aktar oturum güvenlik iki adımlı 2fa bildirim telegram ntfy otomatik bakım modu' },
 ]
 
 export const NAV_GROUPS = ['Sayfam', 'Kitle', 'Araçlar']

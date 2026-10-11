@@ -48,6 +48,16 @@ model Profile {
   showShareButton   Boolean @default(true)
   showNewsletter    Boolean @default(true) // Bülten abonelik kutusu
   showCategoryTabs  Boolean @default(true) // Linklerde 2+ kategori varsa üstte sekmeler
+  showViewCounter   Boolean @default(false) // Sayfanın altında "X kez görüntülendi"
+
+  // "Bu hafta / şu an" duyurusu: sayfanın üstünde; bitiş tarihi geçince kendiliğinden kaybolur
+  announcementText  String    @default("")
+  announcementUrl   String    @default("")
+  announcementUntil DateTime?
+
+  // Bakım modu: ziyaretçiler yalnızca bakım mesajını görür, admin siteyi normal görür
+  maintenanceMode    Boolean @default(false)
+  maintenanceMessage String  @default("")
   
   // Contact Settings
   contactEmail    String @default("")
@@ -229,6 +239,12 @@ model PageView {
 
 // Uygulamanın kendi iç durumu: kalıcı gizli anahtar, otomatik işlerin son çalışma zamanı vb.
 // Yedeğe girmez.
+// Kalıcı sayaçlar (ör. toplam sayfa görüntülenmesi: analitik verisi silinse de düşmez)
+model Counter {
+  key   String @id
+  value Int    @default(0)
+}
+
 model AppState {
   key       String   @id
   value     String
