@@ -783,6 +783,22 @@ test('destek ol bloğu (birden fazla bağış platformu)', async () => {
   await req(`/api/links/${res.data.id}`, { method: 'DELETE', cookie: admin })
 })
 
+test('görsel temizliği yalnızca düğmeyle ve geri alınabilir', async () => {
+  const job = (name) => req('/api/admin/jobs', { method: 'POST', cookie: admin, body: { job: name } })
+  const info = (await req('/api/admin/jobs', { cookie: admin })).data
+  assert.ok(Array.isArray(info.unusedUploads) && Number.isInteger(info.trashedUploads))
+  // Yeni yüklenen ama kullanılmayan görsel bir gün dolmadan listeye girmez
+  const form = new FormData()
+  form.append('file', new Blob([PNG_1PX], { type: 'image/png' }), 'x.png')
+  form.append('kind', 'thumb')
+  const uploaded = await req('/api/admin/upload', { method: 'POST', cookie: admin, body: form })
+  const name = uploaded.data.url.replace('/media/', '')
+  assert.ok(!(await req('/api/admin/jobs', { cookie: admin })).data.unusedUploads.includes(name))
+  assert.equal((await job('cleanup-uploads')).status, 200)
+  assert.equal((await req(uploaded.data.url, { json: false })).status, 200, 'yeni görsel taşınmamalı')
+  assert.equal((await job('restore-trash')).status, 200)
+})
+
 test('giriş rate limit: sadece hatalı denemeler sayılır', async () => {
   for (let i = 0; i < 12; i++) {
     assert.equal((await req('/api/auth/login', { method: 'POST', headers: ip(40), body: { username: 'admin', password: PASSWORD } })).status, 200)

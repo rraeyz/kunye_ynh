@@ -34,9 +34,11 @@ kullanıcının önceliğine göre değişebilir (ör. 2.7 öne alındı).
 - [ ] 3.9 Canlı yayın durumu (Twitch/YouTube; geliştirici anahtarı ister)
 - [ ] 3.10 API anahtarı + kullanım eğitimi
 
-## Açık sorun
-- Otomatik görsel temizliği KAPALI (src/lib/jobs.ts). Bir kurulumda kapak, galeri ve favicon dosyaları kayboldu;
-  sebep kesinleşmedi (temizlik şüpheli). Açmadan önce sebep bulunmalı.
+## Görsel temizliği
+- Kendiliğinden çalışmaz; yalnızca Ayarlar → Otomatik işler → "Çöpe taşı" düğmesiyle (önizleme + onay),
+  dosyalar uploads/.trash'e gider, "Çöpten geri getir" ile döner, 30 gün sonra kalıcı silinir.
+- Bir kurulumda kapak/galeri/favicon kayboldu; bulgular bu dosyaların yedekten geri yüklemede kuruluma hiç
+  gelmediğini, tarayıcı önbelleğinin bunu gizlediğini gösteriyor (temizlik işi kesin suçlu değil).
 
 ## Bekleyen, istenmemiş güvenlik notları
 - Docker kurulumunda kurulum anahtarı (SETUP_TOKEN) üretilmiyor
