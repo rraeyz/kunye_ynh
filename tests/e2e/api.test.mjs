@@ -714,6 +714,21 @@ test('duyuru, ziyaretçi sayacı ve bakım modu', async () => {
   assert.notEqual((await req('/api/admin/revisions', { cookie: admin })).data.undo?.label, 'Bakım modu')
 })
 
+test('otomatik yanıt ve hoş geldin e-postası ayarları', async () => {
+  const put = (body) => req('/api/profile', { method: 'PUT', cookie: admin, body })
+  const saved = await put({ contactAutoReply: 'Mesajını aldım.', welcomeEmailSubject: 'Hoş\ngeldin', welcomeEmailBody: 'Teşekkürler!' })
+  assert.equal(saved.status, 200)
+  assert.equal(saved.data.contactAutoReply, 'Mesajını aldım.')
+  assert.equal(saved.data.welcomeEmailSubject, 'Hoş geldin', 'konuda satır sonu olmamalı (başlık enjeksiyonu)')
+  // SMTP yokken form ve abonelik yine çalışır (e-posta sessizce atlanır)
+  await put({ contactEmail: 'ben@example.com' })
+  assert.equal((await req('/api/contact', { method: 'POST', headers: ip(150), body: { name: 'A', email: 'a@example.com', message: 'm' } })).status, 200)
+  assert.equal((await req('/api/subscribe', { method: 'POST', headers: ip(151), body: { email: 'hosgeldin@example.com' } })).status, 200)
+  // Ayarlar sayfa içeriği değildir, profil yedeğine ve geri ala girmez
+  assert.equal((await req('/api/admin/backup?kind=profile', { cookie: admin })).data.profile.contactAutoReply, undefined)
+  await put({ contactEmail: '', contactAutoReply: '', welcomeEmailSubject: '', welcomeEmailBody: '' })
+})
+
 test('giriş rate limit: sadece hatalı denemeler sayılır', async () => {
   for (let i = 0; i < 12; i++) {
     assert.equal((await req('/api/auth/login', { method: 'POST', headers: ip(40), body: { username: 'admin', password: PASSWORD } })).status, 200)

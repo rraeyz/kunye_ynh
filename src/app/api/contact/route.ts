@@ -3,6 +3,8 @@ import { prisma } from '@/lib/prisma'
 import { escapeHtml, getClientIp, isRateLimited, isValidEmail } from '@/lib/security'
 import { createMailTransport, isSmtpConfigured, loadMailProfile, senderAddress } from '@/lib/mailer'
 import { notifyAdmin } from '@/lib/notify'
+import { inBackground, sendContactAutoReply } from '@/lib/autoMail'
+import { getBaseUrl } from '@/lib/url'
 
 const RECEIVED = 'Mesajınız alındı, en kısa sürede dönüş yapılacaktır.'
 
@@ -46,6 +48,7 @@ export async function POST(request: NextRequest) {
     // Mesaj önce kaydedilir (admin → Mesajlar); e-posta gönderilemese de kaybolmaz
     const saved = await prisma.contactMessage.create({ data: { name: cleanName, email, message: text } })
     notifyAdmin(`Yeni mesaj: ${cleanName}`, `${email}\n\n${text.slice(0, 1000)}`)
+    inBackground(sendContactAutoReply(email, getBaseUrl(request.headers)), 'Otomatik yanıt')
 
     // SMTP ayarlıysa iletişim e-postasına da gönderilir
     const mail = await loadMailProfile()

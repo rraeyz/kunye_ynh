@@ -98,6 +98,11 @@ model Profile {
   // Bülten: açıksa yeni abone, e-postasındaki onay linkine tıklayana kadar "onay bekliyor" kalır
   newsletterDoubleOptIn Boolean @default(false)
 
+  // Otomatik e-postalar (boşsa gönderilmez; SMTP ayarlı olmalı)
+  contactAutoReply    String @default("") // "Bana yaz" ile yazana giden yanıt
+  welcomeEmailSubject String @default("")
+  welcomeEmailBody    String @default("") // Yeni (onaylı) aboneye giden hoş geldin e-postası
+
   // Otomatik işler (günde bir kez çalışır)
   autoBackupEnabled   Boolean @default(false) // Tam yedeği sunucuya kaydet (son 7 gün)
   weeklyReportEnabled Boolean @default(false) // Pazartesi haftalık özet e-postası

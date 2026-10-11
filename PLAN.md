@@ -7,7 +7,7 @@ ve testten geçer; oturum yarıda kalırsa bir sonraki işaretsiz adımdan devam
 - [x] 1.1 Liste blokları: ayırıcı/bölüm başlığı, beceri rozetleri, kupon kodu (kopyala), referanslar, SSS, zaman çizelgesi
 - [x] 1.2 Ürün kartı (fiyat), harita (OpenStreetMap, API anahtarı gerekmez)
 - [x] 1.3 "Bu hafta / şu an" duyuru kutusu, ziyaretçi sayacı, bakım modu
-- [ ] 1.4 İletişim formuna otomatik yanıt, yeni aboneye hoş geldin e-postası
+- [x] 1.4 İletişim formuna otomatik yanıt, yeni aboneye hoş geldin e-postası
 - [ ] 1.5 Blok kopyalama
 
 ## Aşama 2: orta

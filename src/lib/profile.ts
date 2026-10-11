@@ -17,6 +17,7 @@ export const PROFILE_EDITABLE_FIELDS = [
   'showContactButton', 'showShareButton', 'showNewsletter', 'showCategoryTabs', 'showViewCounter',
   'announcementText', 'announcementUrl', 'announcementUntil',
   'maintenanceMode', 'maintenanceMessage',
+  'contactAutoReply', 'welcomeEmailSubject', 'welcomeEmailBody',
   'newsletterDoubleOptIn', 'autoBackupEnabled', 'weeklyReportEnabled', 'linkHealthEnabled',
   'notifyNtfyUrl', 'notifyTelegramToken', 'notifyTelegramChatId',
 ] as const
@@ -28,6 +29,7 @@ export const PROFILE_SETTINGS_FIELDS: ReadonlySet<string> = new Set([
   'newsletterDoubleOptIn', 'autoBackupEnabled', 'weeklyReportEnabled', 'linkHealthEnabled',
   'notifyNtfyUrl', 'notifyTelegramToken', 'notifyTelegramChatId',
   'maintenanceMode', 'maintenanceMessage',
+  'contactAutoReply', 'welcomeEmailSubject', 'welcomeEmailBody',
 ])
 
 const SETTINGS_BOOLEANS = ['newsletterDoubleOptIn', 'autoBackupEnabled', 'weeklyReportEnabled', 'linkHealthEnabled', 'maintenanceMode'] as const
@@ -37,6 +39,9 @@ export function normalizeSettings(data: Record<string, any>): { error: string } 
   for (const key of SETTINGS_BOOLEANS) {
     if (data[key] !== undefined) data[key] = data[key] === true || data[key] === 'true'
   }
+  if (data.contactAutoReply !== undefined) data.contactAutoReply = String(data.contactAutoReply ?? '').trim().slice(0, 5000)
+  if (data.welcomeEmailSubject !== undefined) data.welcomeEmailSubject = String(data.welcomeEmailSubject ?? '').trim().replace(/[\r\n]+/g, ' ').slice(0, 200)
+  if (data.welcomeEmailBody !== undefined) data.welcomeEmailBody = String(data.welcomeEmailBody ?? '').trim().slice(0, 20_000)
   if (data.maintenanceMessage !== undefined) data.maintenanceMessage = String(data.maintenanceMessage ?? '').trim().slice(0, 500)
   if (data.notifyNtfyUrl !== undefined) {
     data.notifyNtfyUrl = String(data.notifyNtfyUrl ?? '').trim().slice(0, 500)

@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { FaInbox, FaTrash, FaReply, FaEnvelopeOpen, FaEnvelope } from 'react-icons/fa'
+import AutoEmailSettings from './AutoEmailSettings'
 
 // Admin → Mesajlar: "Bana yaz" formundan gelen mesajlar. SMTP ayarlı olmasa da burada birikir.
 
@@ -59,6 +60,13 @@ export default function MessagesPanel({ onChange }: { onChange?: () => void }) {
 
   return (
     <div className="space-y-4">
+      <AutoEmailSettings
+        title="Otomatik yanıt"
+        description="Bana yaz formundan yazan kişiye anında bu e-posta gider. Ziyaretçinin yazdıkları yanıta eklenmez."
+        bodyKey="contactAutoReply"
+        bodyPlaceholder="Merhaba, mesajını aldım. En geç 2 gün içinde dönüş yapacağım."
+      />
+
       <p className="text-sm text-gray-400">
         Ziyaretçilerin &quot;Bana yaz&quot; formundan gönderdiği mesajlar. {unread > 0 ? `${unread} okunmamış mesaj var.` : 'Okunmamış mesaj yok.'}
       </p>

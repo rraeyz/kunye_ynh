@@ -5,6 +5,7 @@ import { buildEmailHtml, buildEmailText, createMailTransport, isSmtpConfigured, 
 import { confirmUrl } from '@/lib/unsubscribe'
 import { getBaseUrl } from '@/lib/url'
 import { notifyAdmin } from '@/lib/notify'
+import { inBackground, sendWelcomeEmail } from '@/lib/autoMail'
 
 const SUBSCRIBED = 'Bültene başarıyla abone oldunuz!'
 const PENDING = 'Neredeyse tamam! E-postanıza gelen linke tıklayarak aboneliğinizi onaylayın.'
@@ -70,6 +71,7 @@ export async function POST(request: NextRequest) {
     }
 
     notifyAdmin('Yeni bülten abonesi', [safeName, normalizedEmail].filter(Boolean).join(' · '))
+    inBackground(sendWelcomeEmail(normalizedEmail, getBaseUrl(request.headers)), 'Hoş geldin e-postası')
     return NextResponse.json({ success: true, message: SUBSCRIBED })
   } catch (error) {
     console.error('Subscribe error:', error)
