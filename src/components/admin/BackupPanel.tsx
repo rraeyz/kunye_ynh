@@ -178,7 +178,8 @@ export default function BackupPanel() {
                 <FaExclamationTriangle className="w-4 h-4 mt-0.5 shrink-0" aria-hidden="true" />
                 <span>
                   {RESTORE_WARNING[summary.kind]}
-                  {summary.legacy && ' Eski biçimde bloklar yeniden oluşturulur: tıklama geçmişleri silinir, link şifrelerini yeniden girmeniz gerekir.'}
+                  {summary.legacy && ' Eski biçimde bloklar yeniden oluşturulur: tıklama geçmişleri silinir, link şifrelerini yeniden girmeniz gerekir. Bu dosyada görseller yok: profil fotoğrafı, kapak, galeri ve favicon gibi yüklediğiniz görselleri yeniden yüklemeniz gerekir.'}
+                  {!summary.legacy && summary.counts.files === 0 && ' Bu yedekte hiç görsel yok; yüklenmiş görselleri kullanan alanlar boş görünebilir.'}
                 </span>
               </p>
               <div className="flex flex-wrap gap-2">
