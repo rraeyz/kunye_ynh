@@ -650,6 +650,29 @@ test('liste blokları: başlık, rozetler, SSS, zaman çizelgesi, referanslar, k
   assert.ok(empty.id)
 })
 
+test('ürün kartı ve harita', async () => {
+  const add = (body) => req('/api/links', { method: 'POST', cookie: admin, body })
+  const product = await add({ type: 'product', title: 'Seramik Kupa', price: '₺250', description: 'El yapımı', url: 'https://example.com/kupa' })
+  assert.equal(product.status, 200, JSON.stringify(product.data))
+  assert.equal(product.data.price, '₺250')
+
+  assert.equal((await add({ type: 'map', title: 'Kötü', url: 'https://maps.app.goo.gl/abc' })).status, 400, 'koordinatsız kısa link reddedilmeli')
+  assert.equal((await add({ type: 'map', title: 'Boş' })).status, 400)
+  const fromCoords = await add({ type: 'map', title: 'Atölye', url: '41.0082, 28.9784', description: 'Fatih, İstanbul' })
+  assert.equal(fromCoords.status, 200, JSON.stringify(fromCoords.data))
+  assert.ok(fromCoords.data.url.startsWith('https://www.openstreetmap.org/?mlat=41.0082&mlon=28.9784'), 'koordinat açılabilir linke çevrilmeli')
+  const fromGoogle = await add({ type: 'map', title: 'Kule', url: 'https://www.google.com/maps/place/X/@41.0256,28.9741,17z/data=!3d41.0256424!4d28.9741505' })
+  assert.equal(fromGoogle.status, 200)
+
+  const res = await fetch(B + '/')
+  const home = await res.text()
+  for (const text of ['Seramik Kupa', '₺250', 'Satın al', 'Fatih, İstanbul', 'openstreetmap.org/export/embed.html', 'marker=41.0082,28.9784', 'marker=41.0256424,28.9741505']) {
+    assert.ok(home.includes(text), `ana sayfada olmalı: ${text}`)
+  }
+  assert.ok((res.headers.get('content-security-policy') || '').includes('https://www.openstreetmap.org'), 'CSP harita gömmesine izin vermeli')
+  for (const item of [product, fromCoords, fromGoogle]) await req(`/api/links/${item.data.id}`, { method: 'DELETE', cookie: admin })
+})
+
 test('giriş rate limit: sadece hatalı denemeler sayılır', async () => {
   for (let i = 0; i < 12; i++) {
     assert.equal((await req('/api/auth/login', { method: 'POST', headers: ip(40), body: { username: 'admin', password: PASSWORD } })).status, 200)

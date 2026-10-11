@@ -8,7 +8,7 @@ import {
   FaGithub, FaTwitter, FaLinkedin, FaInstagram, FaYoutube, FaGlobe, FaEnvelope, FaDiscord, FaMedium, FaLink, FaDonate, FaPhone,
   FaMapMarkerAlt, FaCalendarAlt, FaFileAlt, FaMusic, FaVideo, FaGamepad, FaCamera, FaBook, FaHeart, FaShoppingCart, FaUser, FaUsers,
   FaCode, FaCogs, FaCloud, FaAlignLeft, FaBriefcase, FaHourglassHalf, FaImages, FaSpotify, FaExclamationTriangle,
-  FaHeading, FaTags, FaQuestionCircle, FaStream, FaQuoteLeft, FaTicketAlt,
+  FaHeading, FaTags, FaQuestionCircle, FaStream, FaQuoteLeft, FaTicketAlt, FaShoppingBag, FaMapMarkedAlt,
 } from 'react-icons/fa'
 import { healthLabel, isBrokenStatus } from '@/lib/linkHealth'
 import { SiTelegram } from 'react-icons/si'
@@ -84,7 +84,7 @@ const linkCategories = [
 
 
 // Blok tipleri (gruplu). fields: formda gösterilecek alanlar
-type Field = 'url' | 'urlOptional' | 'icon' | 'thumbnail' | 'featured' | 'password' | 'slug' | 'description' | 'images' | 'targetDate' | 'items'
+type Field = 'url' | 'urlOptional' | 'icon' | 'thumbnail' | 'featured' | 'password' | 'slug' | 'description' | 'images' | 'targetDate' | 'items' | 'price'
 
 const linkTypes: Array<{ value: string; label: string; icon: string; description: string; group: string; fields: Field[] }> = [
   { value: 'link', label: 'Normal Link', icon: 'FaLink', description: 'Başka sayfaya yönlendir', group: 'Linkler', fields: ['url', 'description', 'icon', 'thumbnail', 'featured', 'password', 'slug'] },
@@ -92,6 +92,8 @@ const linkTypes: Array<{ value: string; label: string; icon: string; description
   { value: 'donation', label: 'Bağış Yap', icon: 'FaDonate', description: 'Bağış sayfasına git', group: 'Linkler', fields: ['url', 'description', 'icon', 'thumbnail', 'featured', 'password', 'slug'] },
   { value: 'text', label: 'Metin', icon: 'FaAlignLeft', description: 'Başlık ve paragraf', group: 'İçerik', fields: ['description'] },
   { value: 'portfolio', label: 'Portfolyo Kartı', icon: 'FaBriefcase', description: 'Görsel + açıklama', group: 'İçerik', fields: ['urlOptional', 'thumbnail', 'description', 'featured'] },
+  { value: 'product', label: 'Ürün Kartı', icon: 'FaShoppingBag', description: 'Görsel + fiyat + satın al', group: 'İçerik', fields: ['urlOptional', 'thumbnail', 'price', 'description', 'featured'] },
+  { value: 'map', label: 'Harita', icon: 'FaMapMarkedAlt', description: 'Konumunu göster', group: 'İçerik', fields: ['url', 'description'] },
   { value: 'countdown', label: 'Geri Sayım', icon: 'FaHourglassHalf', description: 'Etkinliğe kalan süre', group: 'İçerik', fields: ['targetDate', 'description', 'urlOptional'] },
   { value: 'heading', label: 'Bölüm Başlığı', icon: 'FaHeading', description: 'Blokları bölümlere ayır', group: 'Düzen', fields: ['description'] },
   { value: 'skills', label: 'Rozetler', icon: 'FaTags', description: 'Beceri / araç etiketleri', group: 'Düzen', fields: ['items'] },
@@ -137,6 +139,7 @@ const ITEM_FORMS: Record<string, { addLabel: string; fields: ItemField[] }> = {
 const MAX_ITEMS = 50
 
 const TITLE_PLACEHOLDERS: Record<string, string> = {
+  product: 'El yapımı seramik kupa', map: 'Atölyem',
   text: 'Hakkımda', heading: 'Projelerim (boş bırakılırsa ince çizgi)', skills: 'Kullandığım araçlar',
   faq: 'Sıkça sorulanlar', timeline: 'Deneyim', testimonials: 'Hakkımda söylenenler', coupon: 'Mağazamda %10 indirim',
 }
@@ -148,6 +151,8 @@ const URL_PLACEHOLDERS: Record<string, string> = {
   'embed-youtube': 'https://www.youtube.com/watch?v=...',
   'embed-twitter': 'https://x.com/kullanici/status/...',
   'embed-instagram': 'https://www.instagram.com/p/...',
+  map: 'https://www.google.com/maps/place/... veya 41.0082, 28.9784',
+  product: 'https://www.shopier.com/...',
 }
 
 // Panelde yalnızca seçilebilen ikonlar ve blok tipi ikonları yüklenir. Önceden tüm Fa/Si setleri
@@ -158,7 +163,7 @@ const PANEL_ICONS: Record<string, IconType> = {
   FaLink, FaDonate, FaPhone, FaMapMarkerAlt, FaCalendarAlt, FaFileAlt, FaMusic, FaVideo, FaGamepad, FaCamera,
   FaBook, FaHeart, FaStar, FaShoppingCart, FaUser, FaUsers, FaCode, FaCogs, FaCloud,
   FaAlignLeft, FaBriefcase, FaHourglassHalf, FaImages, FaSpotify,
-  FaHeading, FaTags, FaQuestionCircle, FaStream, FaQuoteLeft, FaTicketAlt,
+  FaHeading, FaTags, FaQuestionCircle, FaStream, FaQuoteLeft, FaTicketAlt, FaShoppingBag, FaMapMarkedAlt,
 }
 const getIconComponent = (iconName: string): IconType => PANEL_ICONS[iconName] || FaLink
 
@@ -192,12 +197,13 @@ type FormData = {
   images: string[]
   targetDate: string
   items: Array<Record<string, string>>
+  price: string
 }
 
 const emptyForm = (): FormData => ({
   title: '', url: '', icon: 'FaLink', customIconUrl: '', useCustomIcon: false, category: '', type: 'link',
   password: '', passwordHint: '', hasExistingPassword: false, removePassword: false, slug: '',
-  startDate: '', endDate: '', featured: false, thumbnail: '', description: '', images: [], targetDate: '', items: [],
+  startDate: '', endDate: '', featured: false, thumbnail: '', description: '', images: [], targetDate: '', items: [], price: '',
 })
 
 const formFromLink = (link: any): FormData => {
@@ -227,6 +233,7 @@ const formFromLink = (link: any): FormData => {
     images: Array.isArray(images) ? images : [],
     targetDate: toLocalInput(link.targetDate),
     items: Array.isArray(items) ? items : [],
+    price: link.price || '',
   }
 }
 
@@ -246,6 +253,7 @@ const payloadFromForm = (form: FormData, mode: 'add' | 'edit') => {
     description: fields.includes('description') ? form.description : '',
     images: fields.includes('images') ? form.images : [],
     items: fields.includes('items') ? form.items : [],
+    price: fields.includes('price') ? form.price : '',
     targetDate: fields.includes('targetDate') ? fromLocalInput(form.targetDate) : null,
     slug: fields.includes('slug') ? form.slug : '',
     passwordHint: form.passwordHint,
@@ -399,14 +407,17 @@ function LinkFormFields({ form, setForm, mode }: { form: FormData; setForm: (f: 
 
       {(has('url') || has('urlOptional')) && (
         <div>
-          <label className={labelClass}>{has('url') ? 'URL' : form.type === 'coupon' ? 'Mağaza linki (opsiyonel)' : 'Link (opsiyonel)'}</label>
-          <input type="url" value={form.url} onChange={(e) => set({ url: e.target.value })} className={inputClass} placeholder={URL_PLACEHOLDERS[form.type] || 'https://...'} />
+          <label className={labelClass}>{form.type === 'map' ? 'Konum' : has('url') ? 'URL' : form.type === 'coupon' ? 'Mağaza linki (opsiyonel)' : form.type === 'product' ? 'Satın alma linki (opsiyonel)' : 'Link (opsiyonel)'}</label>
+          <input type={form.type === 'map' ? 'text' : 'url'} value={form.url} onChange={(e) => set({ url: e.target.value })} className={inputClass} placeholder={URL_PLACEHOLDERS[form.type] || 'https://...'} />
+          {form.type === 'map' && (
+            <p className="text-xs text-gray-500 mt-1">Google Maps&apos;te yeri aç, adres çubuğundaki uzun linki yapıştır. Ya da &quot;41.0082, 28.9784&quot; gibi enlem, boylam yaz. Kısa maps.app.goo.gl linklerinde konum bilgisi yoktur.</p>
+          )}
         </div>
       )}
 
       {has('description') && (
         <div>
-          <label className={labelClass}>{form.type === 'text' ? 'Metin' : form.type === 'coupon' ? 'Kupon kodu' : form.type === 'heading' ? 'Alt yazı (opsiyonel)' : has('url') ? 'Kısa açıklama (opsiyonel)' : 'Açıklama'}</label>
+          <label className={labelClass}>{form.type === 'text' ? 'Metin' : form.type === 'coupon' ? 'Kupon kodu' : form.type === 'heading' ? 'Alt yazı (opsiyonel)' : form.type === 'map' ? 'Adres (opsiyonel)' : has('url') ? 'Kısa açıklama (opsiyonel)' : 'Açıklama'}</label>
           {form.type === 'coupon' ? (
             <input type="text" value={form.description} onChange={(e) => set({ description: e.target.value })} className={`${inputClass} font-mono`} placeholder="INDIRIM10" />
           ) : (
@@ -417,6 +428,13 @@ function LinkFormFields({ form, setForm, mode }: { form: FormData; setForm: (f: 
 
       {has('items') && ITEM_FORMS[form.type] && (
         <ItemsEditor type={form.type} items={form.items} onChange={(items) => set({ items })} />
+      )}
+
+      {has('price') && (
+        <div>
+          <label className={labelClass}>Fiyat (opsiyonel)</label>
+          <input type="text" value={form.price} onChange={(e) => set({ price: e.target.value })} maxLength={50} className={inputClass} placeholder="₺250" />
+        </div>
       )}
 
       {has('targetDate') && (
@@ -450,7 +468,7 @@ function LinkFormFields({ form, setForm, mode }: { form: FormData; setForm: (f: 
 
       {has('thumbnail') && (
         <div>
-          <label className={labelClass}>{form.type === 'portfolio' ? 'Kart görseli' : 'Önizleme görseli (opsiyonel)'}</label>
+          <label className={labelClass}>{form.type === 'portfolio' ? 'Kart görseli' : form.type === 'product' ? 'Ürün görseli' : 'Önizleme görseli (opsiyonel)'}</label>
           {form.thumbnail && (
             <div className="relative mb-2 w-48">
               {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -460,7 +478,7 @@ function LinkFormFields({ form, setForm, mode }: { form: FormData; setForm: (f: 
           )}
           <div className="flex flex-wrap items-start gap-2">
             <ImageUploadButton kind="thumb" label="Görsel Yükle" onUploaded={(url) => set({ thumbnail: url })} />
-            {form.url && form.type !== 'portfolio' && (
+            {form.url && form.type !== 'portfolio' && form.type !== 'product' && (
               <button type="button" onClick={fetchPreview} disabled={previewLoading} className="inline-flex items-center gap-2 px-4 py-2 bg-blue-500/10 hover:bg-blue-500/20 text-blue-400 rounded-lg disabled:opacity-60">
                 {previewLoading ? 'Alınıyor...' : 'Siteden otomatik al'}
               </button>
@@ -593,6 +611,8 @@ function SortableLinkItem({ link, onToggle, onEdit, onMoveUp, onMoveDown, editin
   if (link.type === 'contact') subtitle = 'İletişim formu'
   if (link.type === 'heading') subtitle = link.title ? 'Bölüm başlığı' : 'Ayırıcı çizgi'
   if (link.type === 'coupon') subtitle = `Kod: ${link.description || '-'}`
+  if (link.type === 'product' && link.price) subtitle = `${link.price}${link.url ? ` · ${link.url}` : ''}`
+  if (link.type === 'map') subtitle = link.description || 'Harita'
   if (ITEM_FORMS[link.type]) { try { subtitle = `${JSON.parse(link.items || '[]').length} satır` } catch { subtitle = '0 satır' } }
 
   return (

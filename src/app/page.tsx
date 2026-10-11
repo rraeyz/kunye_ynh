@@ -22,7 +22,8 @@ import TestimonialsBlock from '@/components/blocks/TestimonialsBlock'
 import FaqBlock from '@/components/blocks/FaqBlock'
 import TimelineBlock from '@/components/blocks/TimelineBlock'
 import CouponBlock from '@/components/blocks/CouponBlock'
-import { ITEM_FIELDS, parseImages, parseItems, spotifyEmbedUrl } from '@/lib/links'
+import MapBlock from '@/components/blocks/MapBlock'
+import { ITEM_FIELDS, parseImages, parseItems, parseMapLocation, spotifyEmbedUrl } from '@/lib/links'
 import { isSafeUrl } from '@/lib/security'
 import { renderLinkIcon } from '@/lib/linkIcon'
 import { hasInlineImages, migrateInlineImages } from '@/lib/uploads'
@@ -98,6 +99,7 @@ export default async function Home({ searchParams }: { searchParams?: { link?: s
       case 'spotify': return !!spotifyEmbedUrl(link.url)
       case 'countdown': return !!link.targetDate
       case 'coupon': return !!link.description?.trim()
+      case 'map': return !!parseMapLocation(link.url)
       // Ayırıcı başlıksız da olabilir (yalnızca çizgi)
       case 'heading': return true
       default: return ITEM_FIELDS[link.type] ? parseItems(link.type, link.items).length > 0 : true
@@ -132,9 +134,16 @@ export default async function Home({ searchParams }: { searchParams?: { link?: s
             url={link.url}
           />
         ) : null
+      case 'map': {
+        const location = parseMapLocation(link.url)
+        return location ? <MapBlock title={link.title} address={link.description} lat={location.lat} lon={location.lon} url={link.url} /> : null
+      }
+      case 'product':
       case 'portfolio':
         return (
           <PortfolioCard
+            price={link.price}
+            product={link.type === 'product'}
             linkId={link.id}
             title={link.title}
             description={link.description}

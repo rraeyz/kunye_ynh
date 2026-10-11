@@ -20,7 +20,7 @@ export function runKindOf(block: BlockLike): RunKind | null {
   if (block.featured) return null
   if (LINK_LIKE.has(block.type || 'link')) return 'links'
   if (block.type === 'text' || block.type === 'countdown' || block.type === 'coupon') return 'notes'
-  if (block.type === 'portfolio') return 'cards'
+  if (block.type === 'portfolio' || block.type === 'product') return 'cards'
   return null
 }
 
