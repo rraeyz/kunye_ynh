@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { FaSun, FaMoon } from 'react-icons/fa'
-import { motion } from 'framer-motion'
+import { m as motion } from 'framer-motion' // hafif mod: bkz. MotionProvider
 
 // Açık/koyu mod sadece <html> üzerindeki 'light' / 'dark' sınıfıyla yönetilir.
 // Renkler ThemeProvider'ın CSS değişkenlerinden gelir; burada renk yazılmaz,

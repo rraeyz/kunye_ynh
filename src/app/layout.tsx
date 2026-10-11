@@ -12,15 +12,14 @@ import '@fontsource/poppins/500.css'
 import '@fontsource/poppins/600.css'
 import '@fontsource/poppins/700.css'
 import './globals.css'
-import { prisma } from '@/lib/prisma'
+import { getSiteData } from '@/lib/site'
 import { headers } from 'next/headers'
 import { getBaseUrl } from '@/lib/url'
 
 
 async function getProfileData() {
   try {
-    const profile = await prisma.profile.findFirst()
-    return profile || null
+    return (await getSiteData()).profile
   } catch (error) {
     return null
   }
@@ -40,9 +39,11 @@ export async function generateMetadata(): Promise<Metadata> {
   
   const title = profile?.pageTitle || profile?.name || 'Personal Link Tree'
   const description = profile?.pageDescription || profile?.bio || 'Modern and minimalist personal link tree'
-  // data: URI (eski base64 yüklemeler) sosyal medya önizlemelerinde çalışmaz; o durumda varsayılan avatar kullanılır
-  const ogCandidate = profile?.ogImageUrl || profile?.imageUrl || '/default-avatar.jpg'
-  const ogImage = ogCandidate.startsWith('data:') ? '/default-avatar.jpg' : ogCandidate
+  // Kendi paylaşım görseli yüklenmediyse profil bilgilerinden üretilen kart kullanılır (bkz. api/og).
+  // data: URI (eski base64 yüklemeler) sosyal medya önizlemelerinde çalışmaz.
+  const ogCandidate = profile?.ogImageUrl || ''
+  // ?v=: profil değişince sosyal ağların önbelleğindeki eski kart yerine yenisi alınsın
+  const ogImage = ogCandidate && !ogCandidate.startsWith('data:') ? ogCandidate : `/api/og?v=${profile?.updatedAt ? new Date(profile.updatedAt).getTime() : 0}`
   const favicon = profile?.faviconUrl || '/favicon.png'
   
   return {

@@ -1,8 +1,9 @@
 import { NextResponse } from 'next/server'
+import { withRevision } from '@/lib/revisions'
 import { prisma } from '@/lib/prisma'
 import { isAuthenticated } from '@/lib/auth'
 import { pick } from '@/lib/security'
-import { PROFILE_EDITABLE_FIELDS, normalizeProfileCard, toClientProfile } from '@/lib/profile'
+import { PROFILE_EDITABLE_FIELDS, normalizeProfileCard, normalizeSettings, toClientProfile } from '@/lib/profile'
 
 export const dynamic = 'force-dynamic'
 
@@ -32,16 +33,18 @@ export async function PUT(request: Request) {
 
     // Boş SMTP şifresi "değiştirme" anlamına gelir (panel kayıtlı şifreyi göstermez)
     if (!data.smtpPassword) delete data.smtpPassword
+    if (!data.notifyTelegramToken) delete data.notifyTelegramToken
     if (data.smtpPort !== undefined) data.smtpPort = parseInt(data.smtpPort) || 587
     if (data.backgroundOpacity !== undefined) data.backgroundOpacity = parseInt(data.backgroundOpacity) || 0
-    const invalid = normalizeProfileCard(data)
+    const invalid = normalizeProfileCard(data) || normalizeSettings(data)
     if (invalid) return NextResponse.json(invalid, { status: 400 })
 
-    const existing = await prisma.profile.findFirst()
-
-    const profile = existing
-      ? await prisma.profile.update({ where: { id: existing.id }, data })
-      : await prisma.profile.create({ data: { id: 1, ...data } })
+    const profile = await withRevision('Profil', async () => {
+      const existing = await prisma.profile.findFirst()
+      return existing
+        ? prisma.profile.update({ where: { id: existing.id }, data })
+        : prisma.profile.create({ data: { id: 1, ...data } })
+    })
 
     return NextResponse.json(toClientProfile(profile))
   } catch (error) {

@@ -7,6 +7,9 @@ import { FaLock, FaUser } from 'react-icons/fa'
 export default function LoginForm() {
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
+  // İki adımlı doğrulama açıksa şifreden sonra uygulamadaki kod (ya da kurtarma kodu) istenir
+  const [needsCode, setNeedsCode] = useState(false)
+  const [code, setCode] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
   const router = useRouter()
@@ -20,13 +23,19 @@ export default function LoginForm() {
       const response = await fetch('/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username, password }),
+        body: JSON.stringify({ username, password, ...(needsCode ? { code } : {}) }),
       })
 
       const data = await response.json()
 
       if (!response.ok) {
         setError(data.error || 'Giriş başarısız')
+        setLoading(false)
+        return
+      }
+
+      if (data.twoFactorRequired) {
+        setNeedsCode(true)
         setLoading(false)
         return
       }
@@ -80,6 +89,29 @@ export default function LoginForm() {
           />
         </div>
       </div>
+
+      {needsCode && (
+        <div>
+          <label htmlFor="code" className="block text-sm font-medium text-gray-300 mb-2">
+            Doğrulama kodu
+          </label>
+          <input
+            id="code"
+            type="text"
+            inputMode="numeric"
+            autoComplete="one-time-code"
+            autoFocus
+            value={code}
+            onChange={(e) => setCode(e.target.value)}
+            className="w-full px-4 py-3 bg-dark-bg border border-gray-700 rounded-xl text-white tracking-widest focus:outline-none focus:border-purple-500 transition-colors"
+            placeholder="123456"
+            required
+          />
+          <p className="text-xs text-gray-400 mt-2">
+            Doğrulama uygulamandaki 6 haneli kodu gir. Telefonun yanında değilse kurtarma kodlarından birini kullanabilirsin.
+          </p>
+        </div>
+      )}
 
       {error && (
         <div className="bg-red-500/10 border border-red-500/50 text-red-400 px-4 py-3 rounded-xl text-sm">

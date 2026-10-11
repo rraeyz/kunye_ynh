@@ -1,6 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
-import { getClientIp, isRateLimited, isValidEmail } from '@/lib/security'
+import { escapeHtml, getClientIp, isRateLimited, isValidEmail } from '@/lib/security'
+import { buildEmailHtml, buildEmailText, createMailTransport, isSmtpConfigured, loadMailProfile, senderAddress } from '@/lib/mailer'
+import { confirmUrl } from '@/lib/unsubscribe'
+import { getBaseUrl } from '@/lib/url'
+import { notifyAdmin } from '@/lib/notify'
+
+const SUBSCRIBED = 'Bültene başarıyla abone oldunuz!'
+const PENDING = 'Neredeyse tamam! E-postanıza gelen linke tıklayarak aboneliğinizi onaylayın.'
 
 export async function POST(request: NextRequest) {
   try {
@@ -25,20 +32,45 @@ export async function POST(request: NextRequest) {
     const normalizedEmail = email.trim().toLowerCase()
     const safeName = typeof name === 'string' ? name.trim().slice(0, 100) : ''
 
-    // Abone ekle veya güncelle
+    // Zaten onaylı abone: hiçbir şey değişmez (başkası bu adresle tekrar kaydolarak adı değiştiremez).
+    // Yanıt aynı olduğu için bir adresin listede olup olmadığı da anlaşılmaz.
+    const existing = await prisma.subscriber.findUnique({ where: { email: normalizedEmail } })
+    if (existing?.confirmed) {
+      return NextResponse.json({ success: true, message: SUBSCRIBED })
+    }
+
+    // E-posta onayı (Ayarlar → Bülten) açıksa ve e-posta gönderilebiliyorsa abone onaylayana kadar bekler.
+    // SMTP ayarlı değilse onay e-postası gidemeyeceği için abone doğrudan eklenir.
+    const settings = await prisma.profile.findUnique({ where: { id: 1 }, select: { newsletterDoubleOptIn: true } })
+    const mail = settings?.newsletterDoubleOptIn ? await loadMailProfile() : null
+    const needsConfirm = isSmtpConfigured(mail)
+
     await prisma.subscriber.upsert({
       where: { email: normalizedEmail },
-      update: { name: safeName },
-      create: {
-        email: normalizedEmail,
-        name: safeName,
-      },
+      update: { name: safeName, confirmed: !needsConfirm },
+      create: { email: normalizedEmail, name: safeName, confirmed: !needsConfirm },
     })
 
-    return NextResponse.json({
-      success: true,
-      message: 'Bültene başarıyla abone oldunuz!'
-    })
+    if (needsConfirm && mail) {
+      const baseUrl = getBaseUrl(request.headers)
+      const link = confirmUrl(baseUrl, normalizedEmail)
+      const content = {
+        subject: 'Aboneliğinizi onaylayın',
+        message: `Merhaba${safeName ? ` ${escapeHtml(safeName)}` : ''},\n\nBültene abone olmak için aşağıdaki bağlantıya tıklayın:\n\n[Aboneliğimi onayla](${link})\n\nBu isteği siz yapmadıysanız bu e-postayı yok sayabilirsiniz; onaylanmayan kayıt 7 gün içinde silinir.`,
+        baseUrl,
+      }
+      await createMailTransport(mail).sendMail({
+        from: senderAddress(mail),
+        to: normalizedEmail,
+        subject: content.subject,
+        html: buildEmailHtml(mail, content),
+        text: buildEmailText(mail, content),
+      })
+      return NextResponse.json({ success: true, pending: true, message: PENDING })
+    }
+
+    notifyAdmin('Yeni bülten abonesi', [safeName, normalizedEmail].filter(Boolean).join(' · '))
+    return NextResponse.json({ success: true, message: SUBSCRIBED })
   } catch (error) {
     console.error('Subscribe error:', error)
     return NextResponse.json(

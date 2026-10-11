@@ -203,3 +203,38 @@ export async function fetchLinkPreviewImage(pageUrl: string): Promise<string> {
     throw error
   }
 }
+
+// Link sağlık kontrolü: adresin HTTP durum kodunu döner (yönlendirmeler izlenir, gövde indirilmez).
+// Ulaşılamazsa -1, adres yerel/özel ağdaysa ya da http(s) değilse 0 (kontrol edilmedi) döner.
+export function checkUrlStatus(rawUrl: string, redirects = 0): Promise<number> {
+  return new Promise((resolve) => {
+    let url: URL
+    try {
+      url = new URL(rawUrl)
+    } catch {
+      return resolve(0)
+    }
+    if (url.protocol !== 'http:' && url.protocol !== 'https:') return resolve(0)
+    const host = url.hostname.replace(/^\[|\]$/g, '')
+    if (net.isIP(host) && !isPublicAddress(host)) return resolve(0)
+
+    const client = url.protocol === 'https:' ? https : http
+    const request = client.get(url, {
+      lookup: safeLookup,
+      timeout: TIMEOUT_MS,
+      headers: {
+        'user-agent': 'Mozilla/5.0 (compatible; KunyeLinkCheck/1.0)',
+        accept: 'text/html,application/xhtml+xml,*/*;q=0.8',
+      },
+    }, (response) => {
+      const status = response.statusCode || 0
+      response.destroy()
+      if (status >= 300 && status < 400 && response.headers.location && redirects < 5) {
+        return checkUrlStatus(new URL(response.headers.location, url).toString(), redirects + 1).then(resolve)
+      }
+      resolve(status)
+    })
+    request.on('timeout', () => request.destroy(new Error('timeout')))
+    request.on('error', (error) => resolve(error instanceof PreviewError ? 0 : -1))
+  })
+}

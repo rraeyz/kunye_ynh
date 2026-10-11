@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { revalidateSite } from '@/lib/site'
 import { prisma } from '@/lib/prisma'
-import { isAuthenticated, isSetupComplete, setAuthCookie } from '@/lib/auth'
+import { getJwtSecret, isAuthenticated, isSetupComplete, setAuthCookie } from '@/lib/auth'
 import bcrypt from 'bcryptjs'
 import crypto from 'crypto'
 import fs from 'fs'
@@ -89,7 +90,9 @@ export async function POST(request: NextRequest) {
         }
       }
 
-      const jwtSecret = crypto.randomBytes(32).toString('base64')
+      // Açılışta yüklenen kalıcı anahtar (bkz. loadPersistentSecret) .env'e yazılır; yeni anahtar üretilmez,
+      // yoksa kurulumdan önce verilmiş oturumlar ve IP özetleri boşa düşerdi
+      const jwtSecret = getJwtSecret()
 
       // Şifre .env'e düz metin olarak YAZILMAZ; Admin tablosunda bcrypt hash olarak tutulur
       const envContent = `# Database
@@ -110,6 +113,9 @@ NODE_ENV=production
           id: 1,
           username: adminUsername,
           passwordHash: await bcrypt.hash(adminPassword, 12),
+          // Gizli anahtar korunduğu için ("şifremi unuttum" ile Admin silinip sihirbaz yeniden çalışınca)
+          // eski oturum çerezleri 0'dan başlayan sürümle yeniden geçerli olmasın
+          sessionVersion: crypto.randomInt(1, 1_000_000_000),
         },
       })
 
@@ -173,6 +179,7 @@ NODE_ENV=production
           }
         })
 
+        revalidateSite()
         return NextResponse.json({
           success: true,
           message: 'Database initialized',

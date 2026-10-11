@@ -1,6 +1,6 @@
 #!/bin/bash
 
-echo "🚀 Personal Link Tree - Quick Start"
+echo "🚀 Künye - Quick Start"
 echo "===================================="
 echo ""
 

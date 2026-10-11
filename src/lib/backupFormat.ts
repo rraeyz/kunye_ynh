@@ -10,7 +10,7 @@ export type BackupKind = (typeof BACKUP_KINDS)[number]
 export const BACKUP_KIND_INFO: Record<BackupKind, { label: string; description: string }> = {
   full: {
     label: 'Tam yedek',
-    description: 'Her şey: profil, görünüm, bloklar (şifreleri dahil), aboneler, analitik, SMTP ayarları ve yüklenen görseller. Sunucu taşırken bunu kullanın.',
+    description: 'Her şey: profil, görünüm, bloklar (şifreleri dahil), aboneler, iletişim mesajları, analitik, SMTP ve bildirim ayarları ve yüklenen görseller. Sunucu taşırken bunu kullanın.',
   },
   settings: {
     label: 'Sayfa ve ayarlar',

@@ -3,6 +3,8 @@ import path from 'path'
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { isAuthenticated } from '@/lib/auth'
+import { databaseDir } from '@/lib/backup'
+import { isBrokenStatus } from '@/lib/linkHealth'
 import pkg from '../../../../../package.json'
 
 export const dynamic = 'force-dynamic'
@@ -18,12 +20,10 @@ function lastDays(count: number): string[] {
   return days
 }
 
-// db-backup.js her başarılı yedekte veritabanının yanına .last-backup yazar
+// db-backup.js ve otomatik yedek her başarılı yedekte veritabanının yanına .last-backup yazar
 function readLastBackup(): string | null {
   try {
-    const url = process.env.DATABASE_URL || 'file:/app/prisma/dev.db'
-    const dbPath = path.resolve(url.replace(/^file:/, ''))
-    const raw = fs.readFileSync(path.join(path.dirname(dbPath), '.last-backup'), 'utf8')
+    const raw = fs.readFileSync(path.join(databaseDir(), '.last-backup'), 'utf8')
     const at = new Date(JSON.parse(raw).at)
     return isNaN(at.getTime()) ? null : at.toISOString()
   } catch {
@@ -45,16 +45,16 @@ export async function GET(request: NextRequest) {
     const inRange = { gte: start }
     const inPrev = { gte: prevStart, lt: start }
 
-    const [views, clicks, subscribers, prevViews, prevClicks, prevSubscribers, prevVisitors, totalSubscribers, topGroups, profile, links] =
+    const [views, clicks, subscribers, prevViews, prevClicks, prevSubscribers, prevVisitors, totalSubscribers, topGroups, profile, links, unreadMessages] =
       await Promise.all([
         prisma.pageView.findMany({ where: { timestamp: inRange }, select: { timestamp: true, ipHash: true } }),
         prisma.analytics.findMany({ where: { timestamp: inRange }, select: { timestamp: true, ipHash: true } }),
-        prisma.subscriber.findMany({ where: { createdAt: inRange }, select: { createdAt: true } }),
+        prisma.subscriber.findMany({ where: { createdAt: inRange, confirmed: true }, select: { createdAt: true } }),
         prisma.pageView.count({ where: { timestamp: inPrev } }),
         prisma.analytics.count({ where: { timestamp: inPrev } }),
-        prisma.subscriber.count({ where: { createdAt: inPrev } }),
+        prisma.subscriber.count({ where: { createdAt: inPrev, confirmed: true } }),
         prisma.pageView.findMany({ where: { timestamp: inPrev }, select: { ipHash: true }, distinct: ['ipHash'] }),
-        prisma.subscriber.count(),
+        prisma.subscriber.count({ where: { confirmed: true } }),
         prisma.analytics.groupBy({
           by: ['linkId'],
           where: { timestamp: inRange },
@@ -63,7 +63,8 @@ export async function GET(request: NextRequest) {
           take: 5,
         }),
         prisma.profile.findUnique({ where: { id: 1 }, select: { smtpHost: true, smtpUser: true, smtpPassword: true } }),
-        prisma.link.findMany({ select: { id: true, title: true, enabled: true, startDate: true, endDate: true } }),
+        prisma.link.findMany({ select: { id: true, title: true, enabled: true, startDate: true, endDate: true, healthStatus: true } }),
+        prisma.contactMessage.count({ where: { read: false } }),
       ])
 
     // Günlük seriler (kartlardaki küçük grafikler)
@@ -94,6 +95,8 @@ export async function GET(request: NextRequest) {
       .sort((a, b) => a.startDate!.getTime() - b.startDate!.getTime())
     // Süresi dolduğu için sitede görünmeyen ama hâlâ açık linkler
     const expired = links.filter((link) => link.enabled && link.endDate && link.endDate < now)
+    // Son link kontrolünde açılmayan linkler
+    const broken = links.filter((link) => link.enabled && isBrokenStatus(link.healthStatus))
 
     return NextResponse.json({
       range,
@@ -112,6 +115,8 @@ export async function GET(request: NextRequest) {
         upcoming: upcoming.length,
         nextUpcoming: upcoming[0] ? { title: upcoming[0].title, startDate: upcoming[0].startDate } : null,
         expired: expired.length,
+        broken: broken.map((link) => link.title),
+        unreadMessages,
         version: pkg.version,
       },
     })

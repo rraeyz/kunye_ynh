@@ -113,7 +113,7 @@ for (const width of [320, 360, 390, 430, 768, 1024, 1440]) {
 
   // Sol menüdeki tüm bölümler
   const nav = page.getByRole('navigation', { name: 'Admin menüsü' })
-  for (const tab of ['Profil', 'Linkler ve Bloklar', 'Görünüm', 'Analitik', 'Aboneler', 'E-posta Gönder', 'QR Kod', 'Ayarlar', 'Genel Bakış']) {
+  for (const tab of ['Profil', 'Linkler ve Bloklar', 'Görünüm', 'Analitik', 'Mesajlar', 'Aboneler', 'E-posta Gönder', 'QR Kod', 'Ayarlar', 'Genel Bakış']) {
     await nav.getByRole('button', { name: tab, exact: true }).click()
     await heading(page, tab)
     await page.waitForTimeout(700)
@@ -201,7 +201,7 @@ for (const width of [320, 360, 390, 430, 768, 1024, 1440]) {
   await page.getByText(/^Sürüm /).waitFor({ timeout: 15000 })
   await noHorizontalScroll(page, 'admin 320px Genel Bakış')
   const bottom = page.getByRole('navigation', { name: 'Alt menü' })
-  for (const tab of ['Profil', 'Linkler ve Bloklar', 'Görünüm', 'Analitik', 'Aboneler', 'E-posta Gönder', 'QR Kod', 'Ayarlar']) {
+  for (const tab of ['Profil', 'Linkler ve Bloklar', 'Görünüm', 'Analitik', 'Mesajlar', 'Aboneler', 'E-posta Gönder', 'QR Kod', 'Ayarlar']) {
     await bottom.getByRole('button', { name: 'Daha fazla' }).click()
     await page.getByRole('dialog', { name: 'Tüm bölümler' }).getByRole('button', { name: tab, exact: true }).click()
     await heading(page, tab)

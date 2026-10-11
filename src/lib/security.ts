@@ -8,7 +8,8 @@ export function getClientIp(headers: Headers): string {
   return forwardedFor || '127.0.0.1'
 }
 
-// Ham IP saklanmaz (KVKK/GDPR): JWT_SECRET ile tuzlanmış kısa bir hash tutulur
+// Ham IP saklanmaz (KVKK/GDPR): JWT_SECRET ile tuzlanmış kısa bir hash tutulur.
+// JWT_SECRET açılışta her zaman ayarlanır (bkz. loadPersistentSecret); 'linktree' yalnızca son çare.
 export function hashIp(ip: string): string {
   const salt = process.env.JWT_SECRET || 'linktree'
   return crypto.createHash('sha256').update(`${salt}:${ip}`).digest('hex').substring(0, 16)

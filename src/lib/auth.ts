@@ -3,6 +3,8 @@ import bcrypt from 'bcryptjs'
 import crypto from 'crypto'
 import { cookies, headers } from 'next/headers'
 import { prisma } from '@/lib/prisma'
+import { getState, setState } from '@/lib/appState'
+import { hashRecoveryCode, verifyTotp } from '@/lib/totp'
 
 export const AUTH_COOKIE = 'auth-token'
 const TOKEN_MAX_AGE = 60 * 60 * 24 * 7 // 7 gün
@@ -29,6 +31,29 @@ export function getJwtSecret(): string {
     globalForAuth.fallbackJwtSecret = crypto.randomBytes(32).toString('base64')
   }
   return globalForAuth.fallbackJwtSecret
+}
+
+// Açılışta bir kez çağrılır (src/instrumentation.ts). .env'de geçerli bir JWT_SECRET varsa veritabanına da
+// yazılır; yoksa (ör. Docker'da .env dosyası yazılamadıysa) veritabanındaki anahtar kullanılır, o da yoksa
+// üretilip saklanır. Böylece yeniden başlatmada oturumlar, IP özetleri ve e-postalardaki
+// "abonelikten çık" linkleri geçersiz olmaz.
+export async function loadPersistentSecret(): Promise<void> {
+  const key = 'jwtSecret'
+  try {
+    const fromEnv = process.env.JWT_SECRET
+    const stored = await prisma.appState.findUnique({ where: { key } })
+    if (fromEnv && !PLACEHOLDER_VALUES.has(fromEnv)) {
+      if (stored?.value !== fromEnv) {
+        await prisma.appState.upsert({ where: { key }, update: { value: fromEnv }, create: { key, value: fromEnv } })
+      }
+      return
+    }
+    const secret = stored?.value || crypto.randomBytes(32).toString('base64')
+    if (!stored) await prisma.appState.create({ data: { key, value: secret } })
+    process.env.JWT_SECRET = secret
+  } catch (error) {
+    console.error('Kalıcı gizli anahtar yüklenemedi, bu çalışma için geçici anahtar kullanılacak:', error)
+  }
 }
 
 export function signToken(payload: object): string {
@@ -134,4 +159,33 @@ export async function verifyAdminCredentials(username: string, password: string)
     },
   })
   return true
+}
+
+// Şifre doğrulandıktan sonra ikinci adım. 'off': 2FA kapalı, 'required': kod gönderilmedi,
+// 'ok' / 'recovery': geçerli kod ya da kurtarma kodu (kurtarma kodu kullanılınca silinir), 'invalid': hatalı.
+export async function verifySecondFactor(code: unknown): Promise<'off' | 'required' | 'ok' | 'recovery' | 'invalid'> {
+  const admin = await prisma.admin.findFirst({ select: { id: true, totpSecret: true, totpRecovery: true } })
+  if (!admin?.totpSecret) return 'off'
+  const given = typeof code === 'string' ? code.trim() : ''
+  if (!given) return 'required'
+
+  const counter = verifyTotp(admin.totpSecret, given)
+  if (counter !== null) {
+    // Aynı kod (30 sn içinde) ikinci kez kullanılamaz
+    const last = Number(await getState('totpLastCounter'))
+    if (Number.isFinite(last) && counter <= last) return 'invalid'
+    await setState('totpLastCounter', String(counter))
+    return 'ok'
+  }
+
+  let hashes: string[] = []
+  try {
+    hashes = JSON.parse(admin.totpRecovery || '[]')
+  } catch {}
+  const hash = hashRecoveryCode(given)
+  if (given.length >= 10 && hashes.includes(hash)) {
+    await prisma.admin.update({ where: { id: admin.id }, data: { totpRecovery: JSON.stringify(hashes.filter((h) => h !== hash)) } })
+    return 'recovery'
+  }
+  return 'invalid'
 }

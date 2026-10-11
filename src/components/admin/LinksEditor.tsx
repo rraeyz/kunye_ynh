@@ -2,7 +2,15 @@
 
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { FaPlus, FaTrash, FaTimes, FaGripVertical, FaSave, FaChartBar, FaFolder, FaEdit, FaLock, FaClock, FaStar, FaChevronUp, FaChevronDown } from 'react-icons/fa'
+import type { IconType } from 'react-icons'
+import {
+  FaPlus, FaTrash, FaTimes, FaGripVertical, FaSave, FaChartBar, FaFolder, FaEdit, FaLock, FaClock, FaStar, FaChevronUp, FaChevronDown,
+  FaGithub, FaTwitter, FaLinkedin, FaInstagram, FaYoutube, FaGlobe, FaEnvelope, FaDiscord, FaMedium, FaLink, FaDonate, FaPhone,
+  FaMapMarkerAlt, FaCalendarAlt, FaFileAlt, FaMusic, FaVideo, FaGamepad, FaCamera, FaBook, FaHeart, FaShoppingCart, FaUser, FaUsers,
+  FaCode, FaCogs, FaCloud, FaAlignLeft, FaBriefcase, FaHourglassHalf, FaImages, FaSpotify, FaExclamationTriangle,
+} from 'react-icons/fa'
+import { healthLabel, isBrokenStatus } from '@/lib/linkHealth'
+import { SiTelegram } from 'react-icons/si'
 import ScheduleStatus from '@/components/ScheduleStatus'
 import ImageUploadButton from './ImageUploadButton'
 import SelectMenu from './SelectMenu'
@@ -100,11 +108,16 @@ const URL_PLACEHOLDERS: Record<string, string> = {
   'embed-instagram': 'https://www.instagram.com/p/...',
 }
 
-// Icon renderer helper
-const getIconComponent = (iconName: string) => {
-  const allIcons = { ...require('react-icons/fa'), ...require('react-icons/si') } as any
-  return allIcons[iconName] || allIcons['FaLink']
+// Panelde yalnızca seçilebilen ikonlar ve blok tipi ikonları yüklenir. Önceden tüm Fa/Si setleri
+// (~2.5 MB) panele gömülüyordu. Listede olmayan eski bir ikon adı panelde link ikonuyla görünür;
+// ziyaretçi sayfası ikonları sunucuda tüm setten çizmeye devam eder (bkz. lib/linkIcon).
+const PANEL_ICONS: Record<string, IconType> = {
+  FaGithub, FaTwitter, FaLinkedin, FaInstagram, FaYoutube, FaGlobe, FaEnvelope, FaDiscord, SiTelegram, FaMedium,
+  FaLink, FaDonate, FaPhone, FaMapMarkerAlt, FaCalendarAlt, FaFileAlt, FaMusic, FaVideo, FaGamepad, FaCamera,
+  FaBook, FaHeart, FaStar, FaShoppingCart, FaUser, FaUsers, FaCode, FaCogs, FaCloud,
+  FaAlignLeft, FaBriefcase, FaHourglassHalf, FaImages, FaSpotify,
 }
+const getIconComponent = (iconName: string): IconType => PANEL_ICONS[iconName] || FaLink
 
 // datetime-local alanı yerel saat ister; veritabanı UTC tutar. İki yönde de doğru çevir
 // (önceden UTC değer yerel saatmiş gibi gösteriliyor, her düzenlemede saat kayıyordu).
@@ -516,6 +529,14 @@ function SortableLinkItem({ link, onToggle, onEdit, onMoveUp, onMoveDown, editin
             )}
             {link.slug && <span className="px-2 py-0.5 bg-purple-500/20 text-purple-400 text-xs rounded-full">/go/{link.slug}</span>}
             {link.clicks > 0 && <span className="px-2 py-0.5 bg-green-500/20 text-green-400 text-xs rounded-full flex items-center gap-1"><FaChartBar className="w-3 h-3" />{link.clicks} tıklama</span>}
+            {link.enabled && isBrokenStatus(link.healthStatus ?? 0) && (
+              <span
+                className="px-2 py-0.5 bg-red-500/20 text-red-300 text-xs rounded-full flex items-center gap-1"
+                title={`Son kontrol${link.healthCheckedAt ? ` (${new Date(link.healthCheckedAt).toLocaleString('tr-TR')})` : ''}: ${healthLabel(link.healthStatus)}`}
+              >
+                <FaExclamationTriangle className="w-3 h-3" aria-hidden="true" />Açılmıyor ({healthLabel(link.healthStatus)})
+              </span>
+            )}
           </div>
           {subtitle && <p className="text-sm text-gray-400 mt-1 truncate">{subtitle}</p>}
           {isScheduled && <div className="mt-2"><ScheduleStatus startDate={link.startDate} endDate={link.endDate} /></div>}

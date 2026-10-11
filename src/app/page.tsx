@@ -6,6 +6,7 @@ import SocialEmbed from '@/components/SocialEmbed'
 import ThemeToggle from '@/components/ThemeToggle'
 import ThemeScript from '@/components/ThemeScript'
 import ViewTracker from '@/components/ViewTracker'
+import MotionProvider from '@/components/MotionProvider'
 import ProfileCard from '@/components/site/ProfileCard'
 import NewsletterBox from '@/components/site/NewsletterBox'
 import CategoryTabs from '@/components/site/CategoryTabs'
@@ -21,6 +22,9 @@ import { renderLinkIcon } from '@/lib/linkIcon'
 import { hasInlineImages, migrateInlineImages } from '@/lib/uploads'
 import { redirect } from 'next/navigation'
 import { isSetupComplete } from '@/lib/auth'
+import { getSiteData, revalidateSite } from '@/lib/site'
+import { getBaseUrl, toAbsoluteUrl } from '@/lib/url'
+import { headers } from 'next/headers'
 
 export const dynamic = 'force-dynamic'
 
@@ -33,14 +37,15 @@ export default async function Home({ searchParams }: { searchParams?: { link?: s
     redirect('/setup')
   }
 
-  // Profil bilgilerini al
-  let profile
+  // Profil ve açık bloklar (önbellekten; bkz. lib/site)
+  let siteData
   try {
-    profile = await prisma.profile.findFirst()
+    siteData = await getSiteData()
   } catch (error) {
     // Database not initialized
     redirect('/setup')
   }
+  let profile = siteData.profile
   
   // İlk kez çalışıyorsa setup'a yönlendir
   if (!profile) {
@@ -50,24 +55,19 @@ export default async function Home({ searchParams }: { searchParams?: { link?: s
   // Eski sürümlerden kalan base64 görselleri bir kerelik dosyaya taşı
   if (hasInlineImages(profile)) {
     const currentProfile = profile
-    const updates = await migrateInlineImages(currentProfile, (data) =>
-      prisma.profile.update({ where: { id: currentProfile.id }, data })
-    ).catch((error) => {
+    const updates = await migrateInlineImages(currentProfile, async (data) => {
+      await prisma.profile.update({ where: { id: currentProfile.id }, data })
+      revalidateSite()
+    }).catch((error) => {
       console.error('Base64 görsel taşıma hatası:', error)
       return {}
     })
     profile = { ...profile, ...updates }
   }
 
-  // Aktif linkleri sıralı şekilde al ve scheduled links'i filtrele
-  const allLinks = await prisma.link.findMany({
-    where: { enabled: true },
-    orderBy: { order: 'asc' },
-  })
-
   // Tarih kontrolü - sadece aktif scheduled links göster
   const now = new Date()
-  const links = allLinks.map((link) => ({
+  const links = siteData.links.map((link) => ({
     ...link,
     // Son savunma hattı: http(s)/mailto/tel dışındaki adresler (ör. javascript:) sayfaya hiç çıkmaz
     url: isSafeUrl(link.url) ? link.url : '',
@@ -99,8 +99,9 @@ export default async function Home({ searchParams }: { searchParams?: { link?: s
   const categories = blockCategories(visibleLinks)
   const showTabs = profile.showCategoryTabs && categories.length >= 2
 
-  // "Bana yaz" yalnızca form gerçekten gönderebilecekse görünür
-  const contactReady = !!(profile.contactEmail && profile.smtpHost && profile.smtpUser && profile.smtpPassword)
+  // "Bana yaz": iletişim e-postası girildiyse görünür. Mesajlar admin panelinde (Mesajlar) saklanır;
+  // SMTP ayarlıysa ayrıca e-posta olarak da gelir
+  const contactReady = !!profile.contactEmail
 
   const renderBlock = (link: any, inRun: boolean) => {
     switch (link.type) {
@@ -174,8 +175,32 @@ export default async function Home({ searchParams }: { searchParams?: { link?: s
     return 'grid grid-cols-1 gap-3 md:grid-cols-[repeat(auto-fit,minmax(15rem,1fr))]'
   }
 
+  // Yapısal veri (schema.org ProfilePage + Person): arama motorları sayfanın kime ait olduğunu ve
+  // hangi sosyal hesapların aynı kişiye ait olduğunu (sameAs) anlar. Değerler Profil bölümünden gelir.
+  const baseUrl = getBaseUrl(headers())
+  const absolute = (url: string) => toAbsoluteUrl(url, baseUrl)
+  const sameAs = [profile.linkedinUrl, profile.twitterUrl, profile.instagramUrl, profile.youtubeUrl, profile.githubUrl]
+    .filter((url) => isSafeUrl(url) && /^https?:/i.test(url))
+  const jsonLd = {
+    '@context': 'https://schema.org',
+    '@type': 'ProfilePage',
+    url: `${baseUrl}/`,
+    mainEntity: {
+      '@type': 'Person',
+      name: profile.name,
+      ...(profile.bio ? { description: profile.bio } : {}),
+      ...(profile.imageUrl && !profile.imageUrl.startsWith('data:') ? { image: absolute(profile.imageUrl) } : {}),
+      ...(profile.location ? { homeLocation: { '@type': 'Place', name: profile.location } } : {}),
+      url: `${baseUrl}/`,
+      ...(sameAs.length ? { sameAs } : {}),
+    },
+  }
+
   return (
+    <MotionProvider>
     <main className="min-h-screen relative">
+      {/* "<" kaçışlanır: profil metni script etiketini kapatamasın */}
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd).replace(/</g, '\\u003c') }} />
       <ThemeScript />
       <ViewTracker />
       <ThemeProvider
@@ -252,5 +277,6 @@ export default async function Home({ searchParams }: { searchParams?: { link?: s
         </footer>
       </div>
     </main>
+    </MotionProvider>
   )
 }

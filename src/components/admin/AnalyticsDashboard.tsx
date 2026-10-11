@@ -1,8 +1,9 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { FaChartLine, FaMousePointer, FaLink, FaCrown, FaGlobe, FaDesktop, FaMobile, FaCalendar, FaInfoCircle, FaEye, FaUsers, FaPercent, FaBullhorn } from 'react-icons/fa'
+import { FaChartLine, FaMousePointer, FaLink, FaCrown, FaGlobe, FaDesktop, FaCalendar, FaInfoCircle, FaEye, FaUsers, FaPercent, FaBullhorn, FaClock } from 'react-icons/fa'
 import { BarChart, Bar, LineChart, Line, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts'
+import SelectMenu from './SelectMenu'
 
 interface AnalyticsProps {
   links: any[]
@@ -10,19 +11,84 @@ interface AnalyticsProps {
 
 const COLORS = ['#a855f7', '#ec4899', '#8b5cf6', '#d946ef', '#c026d3', '#9333ea', '#a21caf', '#7c3aed']
 
+// Önceki aynı uzunluktaki döneme göre değişim; yön renkle birlikte metinle de yazılır
+function changeText(current: number, previous: number | null | undefined, days: number) {
+  if (previous === null || previous === undefined) return ''
+  if (previous === 0) return current === 0 ? '' : 'Önceki dönemde veri yok'
+  const percent = Math.round(((current - previous) / previous) * 100)
+  if (percent === 0) return `Önceki ${days} günle aynı`
+  return `Önceki ${days} güne göre %${Math.abs(percent)} ${percent > 0 ? 'artış' : 'düşüş'}`
+}
+
+const WEEKDAYS = ['Pzt', 'Sal', 'Çar', 'Per', 'Cum', 'Cmt', 'Paz']
+
+// Haftanın günü × saat ısı haritası. Sunucu UTC sayar; burada tarayıcının saat dilimine kaydırılır.
+// shortcut: tek bir kaydırma kullanılır (yaz saati değişimi öncesi kayıtlar 1 saat kayabilir); gerekirse sunucuda saat dilimiyle hesapla
+function Heatmap({ data }: { data: number[][] }) {
+  const offsetHours = Math.round(-new Date().getTimezoneOffset() / 60)
+  const local = Array.from({ length: 7 }, () => Array(24).fill(0) as number[])
+  data.forEach((hours, utcDay) => hours.forEach((count, utcHour) => {
+    const total = utcDay * 24 + utcHour + offsetHours
+    const shifted = ((total % 168) + 168) % 168
+    // JS'de pazar 0; tabloda pazartesi ilk satır
+    local[(Math.floor(shifted / 24) + 6) % 7][shifted % 24] += count
+  }))
+  const max = Math.max(1, ...local.flat())
+  const busiest = local.flatMap((hours, day) => hours.map((count, hour) => ({ day, hour, count }))).sort((a, b) => b.count - a.count)[0]
+
+  return (
+    <div>
+      <div className="overflow-x-auto">
+        <table className="border-separate border-spacing-[3px] text-[10px] text-gray-500" aria-label="Gün ve saate göre görüntülenme">
+          <thead>
+            <tr>
+              <th />
+              {Array.from({ length: 24 }, (_, hour) => (
+                <th key={hour} scope="col" className="font-normal w-5">{hour % 3 === 0 ? hour : ''}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {local.map((hours, day) => (
+              <tr key={day}>
+                <th scope="row" className="font-normal pr-1 text-right">{WEEKDAYS[day]}</th>
+                {hours.map((count, hour) => (
+                  <td
+                    key={hour}
+                    title={`${WEEKDAYS[day]} ${String(hour).padStart(2, '0')}:00 · ${count} görüntülenme`}
+                    className="w-5 h-5 rounded-[4px]"
+                    style={{ backgroundColor: count ? `rgba(168, 85, 247, ${0.15 + 0.85 * (count / max)})` : 'rgba(255,255,255,0.04)' }}
+                  />
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      {busiest && busiest.count > 0 && (
+        <p className="text-sm text-gray-400 mt-3">
+          En yoğun zaman: <span className="text-white">{WEEKDAYS[busiest.day]} {String(busiest.hour).padStart(2, '0')}:00–{String((busiest.hour + 1) % 24).padStart(2, '0')}:00</span>. Paylaşımlarını bu saatlere denk getirebilirsin.
+        </p>
+      )}
+    </div>
+  )
+}
+
 export default function AnalyticsDashboard({ links }: AnalyticsProps) {
   const [timeRange, setTimeRange] = useState('7d') // 7d, 30d, all
   const [analytics, setAnalytics] = useState<any>(null)
   const [loading, setLoading] = useState(true)
+  // Link detayı: seçiliyse tıklama verileri yalnızca o link için
+  const [linkId, setLinkId] = useState('')
 
   useEffect(() => {
     fetchAnalytics()
-  }, [timeRange])
+  }, [timeRange, linkId])
 
   const fetchAnalytics = async () => {
     try {
       setLoading(true)
-      const response = await fetch(`/api/analytics?range=${timeRange}`)
+      const response = await fetch(`/api/analytics?range=${timeRange}${linkId ? `&linkId=${linkId}` : ''}`)
       const data = await response.json()
       setAnalytics(data)
     } catch (error) {
@@ -80,6 +146,10 @@ export default function AnalyticsDashboard({ links }: AnalyticsProps) {
   const engagedVisitors = analytics?.engagedVisitors || 0
   const engagementRate = uniqueVisitors > 0 ? Math.round((engagedVisitors / uniqueVisitors) * 1000) / 10 : 0
   const campaigns: { name: string; views: number; clicks: number }[] = analytics?.campaigns || []
+  const previous: { views: number; uniqueVisitors: number; clicks: number } | null = analytics?.previous || null
+  const rangeDays = timeRange === '30d' ? 30 : 7
+  const rangeClicks = analytics?.rangeClicks || 0
+  const selectedLink = links.find((link) => String(link.id) === linkId)
 
   // Grafik başlığı
   const getTrendTitle = () => {
@@ -161,6 +231,15 @@ export default function AnalyticsDashboard({ links }: AnalyticsProps) {
         
         {/* Time Range Selector */}
         <div className="flex flex-wrap gap-2">
+          <div className="w-full sm:w-56">
+            <SelectMenu
+              ariaLabel="Link"
+              value={linkId}
+              onChange={setLinkId}
+              options={[{ value: '', label: 'Tüm linkler' }, ...links.map((link) => ({ value: String(link.id), label: link.title }))]}
+              className="w-full px-3 py-2 bg-dark-card border border-gray-700 rounded-lg text-sm text-white focus:outline-none focus:border-purple-500"
+            />
+          </div>
           {[
             { value: '7d', label: 'Son 7 Gün' },
             { value: '30d', label: 'Son 30 Gün' },
@@ -180,6 +259,15 @@ export default function AnalyticsDashboard({ links }: AnalyticsProps) {
           ))}
         </div>
       </div>
+
+      {selectedLink && (
+        <div className="flex flex-wrap items-center justify-between gap-3 bg-purple-500/10 border border-purple-500/30 rounded-xl px-4 py-3 text-sm">
+          <span className="text-purple-100">
+            <strong>{selectedLink.title}</strong> linkinin detayı: tıklama, cihaz, ülke ve kaynak verileri yalnızca bu link için. Görüntülenmeler profil geneli.
+          </span>
+          <button type="button" onClick={() => setLinkId('')} className="text-purple-300 hover:text-purple-200 underline">Tüm linklere dön</button>
+        </div>
+      )}
 
       {/* Stats Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -233,12 +321,13 @@ export default function AnalyticsDashboard({ links }: AnalyticsProps) {
       </div>
 
       {/* Görüntülenme istatistikleri */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
         <div className="bg-dark-card border border-gray-800 rounded-xl p-6">
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm text-gray-400 mb-1">Profil Görüntülenme</p>
               <p className="text-3xl font-bold text-white">{views.toLocaleString('tr-TR')}</p>
+              {changeText(views, previous?.views, rangeDays) && <p className="text-xs text-gray-500 mt-1">{changeText(views, previous?.views, rangeDays)}</p>}
             </div>
             <div className="p-4 bg-sky-500/20 rounded-xl">
               <FaEye className="w-6 h-6 text-sky-400" />
@@ -250,9 +339,22 @@ export default function AnalyticsDashboard({ links }: AnalyticsProps) {
             <div>
               <p className="text-sm text-gray-400 mb-1">Tekil Ziyaretçi</p>
               <p className="text-3xl font-bold text-white">{uniqueVisitors.toLocaleString('tr-TR')}</p>
+              {changeText(uniqueVisitors, previous?.uniqueVisitors, rangeDays) && <p className="text-xs text-gray-500 mt-1">{changeText(uniqueVisitors, previous?.uniqueVisitors, rangeDays)}</p>}
             </div>
             <div className="p-4 bg-indigo-500/20 rounded-xl">
               <FaUsers className="w-6 h-6 text-indigo-400" />
+            </div>
+          </div>
+        </div>
+        <div className="bg-dark-card border border-gray-800 rounded-xl p-6">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm text-gray-400 mb-1">{selectedLink ? 'Bu linkin tıklaması' : 'Dönemdeki Tıklama'}</p>
+              <p className="text-3xl font-bold text-white">{rangeClicks.toLocaleString('tr-TR')}</p>
+              {changeText(rangeClicks, previous?.clicks, rangeDays) && <p className="text-xs text-gray-500 mt-1">{changeText(rangeClicks, previous?.clicks, rangeDays)}</p>}
+            </div>
+            <div className="p-4 bg-purple-500/20 rounded-xl">
+              <FaMousePointer className="w-6 h-6 text-purple-400" />
             </div>
           </div>
         </div>
@@ -457,6 +559,17 @@ export default function AnalyticsDashboard({ links }: AnalyticsProps) {
             </div>
           )}
         </>
+      )}
+
+      {/* Gün × saat ısı haritası */}
+      {analytics?.heatmap && views > 0 && (
+        <div className="bg-dark-card border border-gray-800 rounded-xl p-6">
+          <h3 className="text-lg font-semibold text-white mb-1 flex items-center gap-2">
+            <FaClock className="text-purple-400" /> Ziyaretçiler ne zaman geliyor?
+          </h3>
+          <p className="text-sm text-gray-400 mb-4">Profil görüntülenmelerinin haftanın günü ve saate göre dağılımı (senin saat diliminde).</p>
+          <Heatmap data={analytics.heatmap} />
+        </div>
       )}
 
       {/* UTM kampanyaları */}

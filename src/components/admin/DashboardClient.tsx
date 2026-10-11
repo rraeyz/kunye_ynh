@@ -2,19 +2,28 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
+import dynamic from 'next/dynamic'
 import { FaMobileAlt, FaSignOutAlt, FaSearch, FaExternalLinkAlt, FaPlus, FaEllipsisH, FaCopy, FaCheck, FaTimes, FaHome, FaLink, FaChartLine } from 'react-icons/fa'
 import ProfileEditor from './ProfileEditor'
 import LinksEditor from './LinksEditor'
 import QRCodeGenerator from './QRCodeGenerator'
 import ThemeEditor from './ThemeEditor'
-import AnalyticsDashboard from './AnalyticsDashboard'
 import SubscriberManagement from './SubscriberManagement'
 import SettingsPanel from './SettingsPanel'
 import CustomEmailPanel from './CustomEmailPanel'
 import LivePreview from './LivePreview'
 import OverviewPanel from './OverviewPanel'
+import MessagesPanel from './MessagesPanel'
+import UndoControls from './UndoControls'
+import { ADMIN_SAVED_EVENT, installAdminSaveEvents } from './adminEvents'
 import CommandPalette, { type PaletteCommand } from './CommandPalette'
 import { ADMIN_NAV, NAV_GROUPS, isAdminTab, navItem, type AdminTab } from './adminNav'
+
+// Grafik kütüphanesi (recharts) büyük: yalnızca Analitik bölümü açılınca indirilir
+const AnalyticsDashboard = dynamic(() => import('./AnalyticsDashboard'), {
+  ssr: false,
+  loading: () => <div className="text-gray-400 text-sm py-12 text-center">Yükleniyor...</div>,
+})
 
 interface DashboardClientProps {
   initialProfile: any
@@ -49,6 +58,7 @@ export default function DashboardClient({ initialProfile, initialLinks }: Dashbo
   const [host, setHost] = useState('')
   const [copied, setCopied] = useState<'' | 'ok' | 'fail'>('')
   const [shortcut, setShortcut] = useState('Ctrl K')
+  const [unread, setUnread] = useState(0)
   const router = useRouter()
 
   const name: string = initialProfile?.name || ''
@@ -109,6 +119,22 @@ export default function DashboardClient({ initialProfile, initialLinks }: Dashbo
     router.refresh()
   }, [router])
 
+  // Panelden yapılan kayıtlar 'admin:saved' olayı yayınlar (önizleme, geri al, mesaj rozeti dinler)
+  useEffect(() => installAdminSaveEvents(), [])
+
+  // Okunmamış mesaj sayısı (menüdeki rozet)
+  const loadUnread = useCallback(() => {
+    fetch('/api/admin/messages?unread=1')
+      .then((response) => (response.ok ? response.json() : null))
+      .then((data) => data && setUnread(data.unread))
+      .catch(() => {})
+  }, [])
+  useEffect(() => {
+    loadUnread()
+    window.addEventListener(ADMIN_SAVED_EVENT, loadUnread)
+    return () => window.removeEventListener(ADMIN_SAVED_EVENT, loadUnread)
+  }, [loadUnread])
+
   // Ctrl/⌘+K: komut paleti. Esc: açık alt menüyü kapat
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -151,6 +177,12 @@ export default function DashboardClient({ initialProfile, initialLinks }: Dashbo
       <button key={item.id} type="button" onClick={() => goTo(item.id)} aria-current={active ? 'page' : undefined} className={navButtonClass(active)}>
         <Icon className={`w-4 h-4 shrink-0 ${active ? 'text-purple-300' : ''}`} aria-hidden="true" />
         <span>{item.label}</span>
+        {item.id === 'messages' && unread > 0 && (
+          // Sayı Mesajlar bölümünde ve Genel Bakış'ta da yazılı; düğmenin adı "Mesajlar" kalsın
+          <span className="ml-auto min-w-[20px] h-5 px-1.5 rounded-full bg-purple-500 text-white text-[11px] font-semibold flex items-center justify-center" aria-hidden="true">
+            {unread}
+          </span>
+        )}
       </button>
     )
   }
@@ -218,6 +250,7 @@ export default function DashboardClient({ initialProfile, initialLinks }: Dashbo
           <div className="flex items-center justify-between gap-3 px-4 sm:px-6 lg:px-8 h-16">
             <h1 className="text-lg sm:text-xl font-semibold text-white truncate">{current.label}</h1>
             <div className="flex items-center gap-2">
+              <UndoControls />
               <button type="button" onClick={() => setPaletteOpen(true)} className="lg:hidden p-2.5 rounded-lg text-gray-300 hover:bg-white/5" aria-label="Ara">
                 <FaSearch className="w-4 h-4" />
               </button>
@@ -248,6 +281,7 @@ export default function DashboardClient({ initialProfile, initialLinks }: Dashbo
             )}
             {activeTab === 'theme' && <ThemeEditor initialProfile={initialProfile} />}
             {activeTab === 'analytics' && <AnalyticsDashboard links={initialLinks} />}
+            {activeTab === 'messages' && <MessagesPanel onChange={loadUnread} />}
             {activeTab === 'subscribers' && <SubscriberManagement />}
             {activeTab === 'custom-email' && <CustomEmailPanel onNavigate={goTo} />}
             {activeTab === 'qr' && (

@@ -2,33 +2,23 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { FaRedo, FaTimes } from 'react-icons/fa'
+import { ADMIN_SAVED_EVENT } from './adminEvents'
 
 // Panelde telefon çerçevesinde sitenin canlı önizlemesi.
-// Panelden yapılan başarılı her kayıt (POST/PUT/DELETE /api/...) önizlemeyi otomatik yeniler.
+// Panelden yapılan başarılı her kayıt (POST/PUT/DELETE /api/..., bkz. adminEvents) önizlemeyi otomatik yeniler.
 // Önizleme admin oturumuyla açıldığı için ziyaret istatistiklerine yazılmaz (/api/views admin'i saymaz).
 export default function LivePreview({ onClose }: { onClose: () => void }) {
   const [version, setVersion] = useState(0)
   const timer = useRef<ReturnType<typeof setTimeout>>()
 
   useEffect(() => {
-    const originalFetch = window.fetch
-    window.fetch = async (...args: Parameters<typeof fetch>) => {
-      const response = await originalFetch(...args)
-      try {
-        const [input, init] = args
-        const method = (init?.method || (input instanceof Request ? input.method : 'GET')).toUpperCase()
-        const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url
-        if (method !== 'GET' && response.ok && url.includes('/api/') && !url.includes('/api/auth/')) {
-          clearTimeout(timer.current)
-          timer.current = setTimeout(() => setVersion((v) => v + 1), 400)
-        }
-      } catch {
-        // Önizleme yenilenemese de asıl istek etkilenmez
-      }
-      return response
+    const onSaved = () => {
+      clearTimeout(timer.current)
+      timer.current = setTimeout(() => setVersion((v) => v + 1), 400)
     }
+    window.addEventListener(ADMIN_SAVED_EVENT, onSaved)
     return () => {
-      window.fetch = originalFetch
+      window.removeEventListener(ADMIN_SAVED_EVENT, onSaved)
       clearTimeout(timer.current)
     }
   }, [])

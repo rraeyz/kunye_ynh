@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import { withRevision } from '@/lib/revisions'
 import { prisma } from '@/lib/prisma'
 import { isAuthenticated } from '@/lib/auth'
 import { buildLinkData } from '@/lib/links'
@@ -26,11 +27,22 @@ export async function PUT(
       return NextResponse.json({ error: result.error }, { status: 400 })
     }
     if (body.type === undefined) delete result.data.type
+    // Adres değiştiyse eski kontrol sonucu (ör. "açılmıyor" uyarısı) geçersiz
+    const data: Record<string, any> = { ...result.data }
+    if (data.url !== undefined && data.url !== existing.url) {
+      data.healthStatus = 0
+      data.healthCheckedAt = null
+    }
 
-    const link = await prisma.link.update({
+    // Etiket: yalnızca sıra değiştiyse art arda gelen sıralama istekleri tek adım olsun
+    const keys = Object.keys(body)
+    const label = keys.length === 1 && keys[0] === 'order' ? 'Sıralama'
+      : keys.length === 1 && keys[0] === 'enabled' ? `"${existing.title}" ${body.enabled ? 'açıldı' : 'kapatıldı'}`
+      : `"${existing.title}" düzenlendi`
+    const link = await withRevision(label, () => prisma.link.update({
       where: { id: linkId },
-      data: result.data,
-    })
+      data,
+    }))
 
     return NextResponse.json(link)
   } catch (error) {
@@ -48,9 +60,12 @@ export async function DELETE(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    await prisma.link.delete({
-      where: { id: parseInt(params.id) },
-    })
+    const id = parseInt(params.id)
+    const existing = await prisma.link.findUnique({ where: { id }, select: { title: true } })
+    if (!existing) {
+      return NextResponse.json({ error: 'Link not found' }, { status: 404 })
+    }
+    await withRevision(`"${existing.title}" silindi`, () => prisma.link.delete({ where: { id } }))
 
     return NextResponse.json({ success: true })
   } catch (error) {

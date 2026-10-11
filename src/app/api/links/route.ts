@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import { withRevision } from '@/lib/revisions'
 import { prisma } from '@/lib/prisma'
 import { isAuthenticated } from '@/lib/auth'
 import { buildLinkData, isUrlRequired } from '@/lib/links'
@@ -43,19 +44,21 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: result.error }, { status: 400 })
     }
 
-    // En yüksek order değerini bul
-    const maxOrderLink = await prisma.link.findFirst({
-      orderBy: { order: 'desc' },
-    })
+    const link = await withRevision(`"${result.data.title}" eklendi`, async () => {
+      // En yüksek order değerini bul
+      const maxOrderLink = await prisma.link.findFirst({
+        orderBy: { order: 'desc' },
+      })
 
-    const link = await prisma.link.create({
-      data: {
-        icon: 'FaLink',
-        ...result.data,
-        title: result.data.title,
-        url: result.data.url ?? '',
-        order: (maxOrderLink?.order || 0) + 1,
-      },
+      return prisma.link.create({
+        data: {
+          icon: 'FaLink',
+          ...result.data,
+          title: result.data.title,
+          url: result.data.url ?? '',
+          order: (maxOrderLink?.order || 0) + 1,
+        },
+      })
     })
 
     return NextResponse.json(link)
