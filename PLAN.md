@@ -34,6 +34,10 @@ kullanıcının önceliğine göre değişebilir (ör. 2.7 öne alındı).
 - [ ] 3.9 Canlı yayın durumu (Twitch/YouTube; geliştirici anahtarı ister)
 - [ ] 3.10 API anahtarı + kullanım eğitimi
 
+## Açık sorun
+- Otomatik görsel temizliği KAPALI (src/lib/jobs.ts). Bir kurulumda kapak, galeri ve favicon dosyaları kayboldu;
+  sebep kesinleşmedi (temizlik şüpheli). Açmadan önce sebep bulunmalı.
+
 ## Bekleyen, istenmemiş güvenlik notları
 - Docker kurulumunda kurulum anahtarı (SETUP_TOKEN) üretilmiyor
 - 3000 portu doğrudan açıksa X-Real-IP başlığına güveniliyor (deneme sınırı aşılabilir)

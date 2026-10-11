@@ -79,7 +79,8 @@ async function cleanupData() {
   await prisma.loginEvent.deleteMany({ where: { timestamp: { lt: new Date(now - 90 * DAY) } } })
   // E-postasını 7 gün içinde onaylamayan aboneler listeden çıkar
   await prisma.subscriber.deleteMany({ where: { confirmed: false, createdAt: { lt: new Date(now - 7 * DAY) } } })
-  await cleanupUploads()
+  // Otomatik görsel temizliği kapalı: bir kurulumda kullanılan görsellerin kaybolduğu bildirildi, sebep kesinleşene
+  // kadar hiçbir dosyaya dokunulmaz. cleanupUploads (çöp klasörüne taşır) kodu duruyor.
 }
 
 // Açık blokların adreslerini kontrol eder; sonuç panelde (Linkler, Genel Bakış) gösterilir
