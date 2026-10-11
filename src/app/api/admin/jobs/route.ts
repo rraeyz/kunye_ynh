@@ -3,7 +3,7 @@ import { isAuthenticated } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { getState, setState } from '@/lib/appState'
 import { AUTO_BACKUP_KEEP, listAutoBackups, writeAutoBackup } from '@/lib/backup'
-import { checkLinkHealth } from '@/lib/jobs'
+import { checkLinkHealth, cleanupUploads, findUnusedUploads, restoreTrash, trashedUploads } from '@/lib/jobs'
 import { sendWeeklyReport } from '@/lib/weeklyReport'
 import { sendNotification } from '@/lib/notify'
 
@@ -16,10 +16,11 @@ export async function GET() {
   }
   const keys = ['job.autoBackup', 'job.linkHealth', 'job.weeklyReport', 'job.cleanup']
   const lastRuns = Object.fromEntries(await Promise.all(keys.map(async (key) => [key.slice(4), await getState(key)])))
-  return NextResponse.json({ lastRuns, autoBackups: await listAutoBackups(), keep: AUTO_BACKUP_KEEP })
+  const [unused, trashed] = await Promise.all([findUnusedUploads(), trashedUploads()])
+  return NextResponse.json({ lastRuns, autoBackups: await listAutoBackups(), keep: AUTO_BACKUP_KEEP, unusedUploads: unused, trashedUploads: trashed.length })
 }
 
-// { job: 'auto-backup' | 'link-health' | 'weekly-report' | 'test-notification' } → şimdi çalıştır
+// { job: 'auto-backup' | 'link-health' | 'weekly-report' | 'test-notification' | 'cleanup-uploads' | 'restore-trash' } → şimdi çalıştır
 export async function POST(request: NextRequest) {
   if (!(await isAuthenticated())) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
@@ -41,6 +42,14 @@ export async function POST(request: NextRequest) {
       case 'weekly-report': {
         const to = await sendWeeklyReport()
         return NextResponse.json({ message: `Haftalık özet ${to} adresine gönderildi` })
+      }
+      case 'cleanup-uploads': {
+        const moved = await cleanupUploads()
+        return NextResponse.json({ message: `${moved} görsel çöp klasörüne taşındı (30 gün içinde geri getirilebilir)` })
+      }
+      case 'restore-trash': {
+        const restored = await restoreTrash()
+        return NextResponse.json({ message: `${restored} görsel çöpten geri getirildi` })
       }
       case 'test-notification': {
         const profile = await prisma.profile.findUnique({ where: { id: 1 }, select: { name: true } })

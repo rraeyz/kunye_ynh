@@ -7,12 +7,14 @@ import { FaRobot, FaBell, FaDownload } from 'react-icons/fa'
 // "Şimdi" düğmeleri beklemeden çalıştırır.
 
 type Toggle = 'autoBackupEnabled' | 'linkHealthEnabled' | 'weeklyReportEnabled'
-type Job = 'auto-backup' | 'link-health' | 'weekly-report' | 'test-notification'
+type Job = 'auto-backup' | 'link-health' | 'weekly-report' | 'test-notification' | 'cleanup-uploads' | 'restore-trash'
 
 interface JobsInfo {
   lastRuns: Record<string, string | null>
   autoBackups: Array<{ name: string; size: number; createdAt: string }>
   keep: number
+  unusedUploads: string[]
+  trashedUploads: number
 }
 
 const inputClass = 'w-full px-4 py-3 bg-dark-bg border border-gray-700 rounded-xl text-white focus:outline-none focus:border-purple-500 transition-colors'
@@ -174,6 +176,46 @@ export default function AutomationPanel() {
               ))}
             </ul>
           </div>
+        )}
+      </div>
+
+      {/* Görsel temizliği: kendiliğinden çalışmaz, yalnızca bu düğmeyle */}
+      <div className="pt-8 border-t border-gray-800">
+        <h3 className="text-sm font-medium text-white">Kullanılmayan görseller</h3>
+        <p className="text-sm text-gray-400 mt-0.5">
+          Profilde ya da herhangi bir blokta (kapalı olanlar dahil) kullanılmayan, en az bir gün önce yüklenmiş görseller.
+          Kendiliğinden silinmez; düğmeyle çöp klasörüne taşınır, 30 gün içinde geri getirilebilir.
+        </p>
+        {jobs && (
+          <>
+            {jobs.unusedUploads.length > 0 ? (
+              <details className="mt-2 text-xs text-gray-400">
+                <summary className="cursor-pointer">{jobs.unusedUploads.length} görsel kullanılmıyor (listeyi gör)</summary>
+                <ul className="mt-1 space-y-0.5 font-mono break-all">
+                  {jobs.unusedUploads.map((name) => (
+                    <li key={name}><a href={`/media/${name}`} target="_blank" rel="noopener noreferrer" className="hover:text-purple-300">{name}</a></li>
+                  ))}
+                </ul>
+              </details>
+            ) : (
+              <p className="mt-2 text-xs text-gray-500">Kullanılmayan görsel yok.</p>
+            )}
+            <div className="flex flex-wrap gap-2 mt-3">
+              <button
+                type="button"
+                disabled={!!running || jobs.unusedUploads.length === 0}
+                onClick={() => confirm(`${jobs.unusedUploads.length} görsel çöp klasörüne taşınsın mı? 30 gün içinde geri getirebilirsin.`) && run('cleanup-uploads')}
+                className="px-3 h-9 rounded-lg border border-gray-700 text-gray-200 text-sm hover:border-gray-600 disabled:opacity-50"
+              >
+                {running === 'cleanup-uploads' ? 'Taşınıyor...' : `Çöpe taşı (${jobs.unusedUploads.length})`}
+              </button>
+              {jobs.trashedUploads > 0 && (
+                <button type="button" disabled={!!running} onClick={() => run('restore-trash')} className="px-3 h-9 rounded-lg border border-gray-700 text-gray-200 text-sm hover:border-gray-600 disabled:opacity-50">
+                  {running === 'restore-trash' ? 'Geri getiriliyor...' : `Çöpten geri getir (${jobs.trashedUploads})`}
+                </button>
+              )}
+            </div>
+          </>
         )}
       </div>
 

@@ -14,11 +14,12 @@ import { sendWeeklyReport } from '@/lib/weeklyReport'
 const HOUR = 60 * 60 * 1000
 const DAY = 24 * HOUR
 const MEDIA_REFERENCE = /\/media\/([a-z]+-[0-9a-f-]{36}\.(?:webp|png|jpg))/g
-// Hiçbir yerde kullanılmayan görsel en az bu kadar eskiyse çöp klasörüne taşınır. Yüklenip henüz
-// kaydedilmemiş görseller ve eski e-postalardaki görseller bir süre daha çalışsın diye cömert tutulur.
-const ORPHAN_GRACE = 7 * DAY
-// Çöp klasöründeki dosyalar bu süreden sonra kalıcı silinir; o zamana kadar elle geri taşınabilir
+// Görsel temizliği yalnızca admin düğmesiyle çalışır (Ayarlar → Otomatik işler), kendiliğinden çalışmaz.
+// Son bir gün içinde yüklenen görsellere dokunulmaz (yüklenip henüz kaydedilmemiş olabilir).
+const ORPHAN_GRACE = DAY
+// Çöp klasöründeki dosyalar bu süreden sonra kalıcı silinir; o zamana kadar "Çöpten geri getir" ile döner
 const TRASH_KEEP = 30 * DAY
+const TRASH_DIR = () => path.join(UPLOAD_DIR, '.trash')
 
 async function runOnce(key: string, interval: number, task: () => Promise<unknown>) {
   const last = await getState(key)
@@ -32,17 +33,10 @@ async function runOnce(key: string, interval: number, task: () => Promise<unknow
   await setState(key, new Date().toISOString())
 }
 
-// Hiçbir profil alanı, blok ya da geri al adımı tarafından kullanılmayan yüklenmiş görselleri
-// uploads/.trash klasörüne taşır (30 gün sonra kalıcı silinir). Geri almak için dosyayı uploads'a geri taşımak yeter.
-export async function cleanupUploads(): Promise<number> {
-  const trash = path.join(UPLOAD_DIR, '.trash')
-  for (const name of await fs.readdir(trash).catch(() => [] as string[])) {
-    const stat = await fs.stat(path.join(trash, name)).catch(() => null)
-    if (stat && Date.now() - stat.mtimeMs > TRASH_KEEP) await fs.unlink(path.join(trash, name)).catch(() => {})
-  }
-
+// Hiçbir profil alanında, blokta (kapalı olanlar dahil) ya da geri al adımında kullanılmayan görseller
+export async function findUnusedUploads(): Promise<string[]> {
   const files = (await fs.readdir(UPLOAD_DIR).catch(() => [] as string[])).filter((name) => FILE_NAME_PATTERN.test(name))
-  if (files.length === 0) return 0
+  if (files.length === 0) return []
   const [profile, links, revisions] = await Promise.all([
     prisma.profile.findFirst(),
     prisma.link.findMany(),
@@ -50,15 +44,31 @@ export async function cleanupUploads(): Promise<number> {
   ])
   const text = JSON.stringify([profile, links]) + revisions.map((revision) => revision.data).join('')
   const used = new Set(Array.from(text.matchAll(MEDIA_REFERENCE), (match) => match[1]))
-  const removed: string[] = []
+  const unused: string[] = []
   for (const name of files) {
     if (used.has(name)) continue
-    const file = path.join(UPLOAD_DIR, name)
-    const stat = await fs.stat(file).catch(() => null)
-    if (!stat || Date.now() - stat.mtimeMs < ORPHAN_GRACE) continue
+    const stat = await fs.stat(path.join(UPLOAD_DIR, name)).catch(() => null)
+    if (stat && Date.now() - stat.mtimeMs >= ORPHAN_GRACE) unused.push(name)
+  }
+  return unused
+}
+
+export async function trashedUploads(): Promise<string[]> {
+  return (await fs.readdir(TRASH_DIR()).catch(() => [] as string[])).filter((name) => FILE_NAME_PATTERN.test(name))
+}
+
+// Kullanılmayan görselleri uploads/.trash'e taşır; çöpte 30 günü geçenleri kalıcı siler
+export async function cleanupUploads(): Promise<number> {
+  const trash = TRASH_DIR()
+  for (const name of await trashedUploads()) {
+    const stat = await fs.stat(path.join(trash, name)).catch(() => null)
+    if (stat && Date.now() - stat.mtimeMs > TRASH_KEEP) await fs.unlink(path.join(trash, name)).catch(() => {})
+  }
+  const removed: string[] = []
+  for (const name of await findUnusedUploads()) {
     await fs.mkdir(trash, { recursive: true })
     // Taşıma anı çöpte kalma süresinin başlangıcı olsun
-    if (await fs.rename(file, path.join(trash, name)).then(() => true, () => false)) {
+    if (await fs.rename(path.join(UPLOAD_DIR, name), path.join(trash, name)).then(() => true, () => false)) {
       const now = new Date()
       await fs.utimes(path.join(trash, name), now, now).catch(() => {})
       removed.push(name)
@@ -66,6 +76,17 @@ export async function cleanupUploads(): Promise<number> {
   }
   if (removed.length) console.log(`🧹 Kullanılmayan ${removed.length} görsel çöp klasörüne taşındı (uploads/.trash): ${removed.join(', ')}`)
   return removed.length
+}
+
+// Çöpteki tüm görselleri yerine geri taşır (aynı adla dosya varsa dokunmaz)
+export async function restoreTrash(): Promise<number> {
+  let restored = 0
+  for (const name of await trashedUploads()) {
+    const target = path.join(UPLOAD_DIR, name)
+    if (await fs.stat(target).then(() => true, () => false)) continue
+    if (await fs.rename(path.join(TRASH_DIR(), name), target).then(() => true, () => false)) restored++
+  }
+  return restored
 }
 
 async function cleanupData() {
@@ -79,8 +100,7 @@ async function cleanupData() {
   await prisma.loginEvent.deleteMany({ where: { timestamp: { lt: new Date(now - 90 * DAY) } } })
   // E-postasını 7 gün içinde onaylamayan aboneler listeden çıkar
   await prisma.subscriber.deleteMany({ where: { confirmed: false, createdAt: { lt: new Date(now - 7 * DAY) } } })
-  // Otomatik görsel temizliği kapalı: bir kurulumda kullanılan görsellerin kaybolduğu bildirildi, sebep kesinleşene
-  // kadar hiçbir dosyaya dokunulmaz. cleanupUploads (çöp klasörüne taşır) kodu duruyor.
+  // Görsel temizliği burada çalışmaz; yalnızca admin düğmesiyle (bkz. cleanupUploads)
 }
 
 // Açık blokların adreslerini kontrol eder; sonuç panelde (Linkler, Genel Bakış) gösterilir
