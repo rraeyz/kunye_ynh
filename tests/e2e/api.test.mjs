@@ -799,6 +799,91 @@ test('görsel temizliği yalnızca düğmeyle ve geri alınabilir', async () => 
   assert.equal((await job('restore-trash')).status, 200)
 })
 
+test('aboneler: CSV içe aktarma ve etiketler', async () => {
+  const importCsv = (body, cookie = admin) => req('/api/subscribers/import', { method: 'POST', cookie, body })
+  assert.equal((await importCsv({ csv: 'a@x.com' }, '')).status, 401)
+  assert.equal((await importCsv({ csv: '' })).status, 400)
+  assert.equal((await importCsv({ csv: 'isim,telefon\nAli,123' })).status, 400, 'e-postasız dosya reddedilmeli')
+
+  // Paneldeki "CSV İndir" biçimi (başlık + tırnaklı hücreler, BOM)
+  const exported = '\uFEFF"Email","İsim","Kayıt Tarihi","Durum","Etiketler"\n"csv1@x.com","Ali","1.01.2026","Onaylı","Müşteri"\n'
+  assert.deepEqual((await importCsv({ csv: exported })).data, { added: 1, updated: 0, skipped: 0 })
+  // Başlıksız, noktalı virgüllü (Türkçe Excel); tırnak içinde ayırıcı; geçersiz satır atlanır; büyük harf adres küçültülür
+  const plain = 'CSV2@X.com;Ayşe Yılmaz\nadres-yok;foo\n"Yılmaz; Can";csv3@x.com\ncsv2@x.com;Tekrar'
+  assert.deepEqual((await importCsv({ csv: plain, tags: 'etkinlik, Etkinlik' })).data, { added: 2, updated: 0, skipped: 1 })
+  // Var olan adres tekrar eklenmez, etiketleri birleştirilir (büyük/küçük harf duyarsız)
+  assert.deepEqual((await importCsv({ csv: 'csv1@x.com', tags: 'müşteri, VIP' })).data, { added: 0, updated: 1, skipped: 0 })
+
+  const list = async () => Object.fromEntries((await req('/api/subscribers', { cookie: admin })).data.filter((s) => s.email.startsWith('csv')).map((s) => [s.email, s]))
+  let subs = await list()
+  assert.equal(subs['csv1@x.com'].name, 'Ali')
+  assert.equal(subs['csv1@x.com'].tags, 'Müşteri, VIP')
+  assert.equal(subs['csv2@x.com'].name, 'Ayşe Yılmaz')
+  assert.equal(subs['csv2@x.com'].tags, 'etkinlik')
+  assert.equal(subs['csv3@x.com'].name, 'Yılmaz; Can')
+  assert.equal(subs['csv3@x.com'].confirmed, true)
+
+  // Toplu etiket ekle / kaldır
+  const patch = (body, cookie = admin) => req('/api/subscribers', { method: 'PATCH', cookie, body })
+  assert.equal((await patch({ ids: [subs['csv1@x.com'].id], addTag: 'x' }, '')).status, 401)
+  assert.equal((await patch({ ids: [], addTag: 'x' })).status, 400)
+  assert.equal((await patch({ ids: [subs['csv1@x.com'].id, subs['csv2@x.com'].id], addTag: 'Yeni' })).status, 200)
+  assert.equal((await patch({ ids: [subs['csv1@x.com'].id], removeTag: 'vip' })).status, 200)
+  subs = await list()
+  assert.equal(subs['csv1@x.com'].tags, 'Müşteri, Yeni')
+  assert.equal(subs['csv2@x.com'].tags, 'etkinlik, Yeni')
+
+  // Etikette abone yoksa gönderim yapılmaz
+  const bulk = await req('/api/subscribers/bulk-email', { method: 'POST', cookie: admin, body: { subject: 'S', message: 'M', tag: 'olmayan-etiket' } })
+  assert.equal(bulk.status, 404)
+})
+
+test('planlanmış bülten', async () => {
+  const schedule = (body, cookie = admin) => req('/api/admin/scheduled-newsletters', { method: 'POST', cookie, body })
+  const inAnHour = new Date(Date.now() + 3600_000).toISOString()
+  assert.equal((await schedule({ subject: 'S', message: 'M', sendAt: inAnHour }, '')).status, 401)
+  assert.equal((await req('/api/admin/scheduled-newsletters')).status, 401)
+  const noSmtp = await schedule({ subject: 'S', message: 'M', sendAt: inAnHour })
+  assert.equal(noSmtp.status, 400, 'SMTP yokken planlanmamalı')
+  assert.match(noSmtp.data.error, /SMTP/)
+
+  // Bağlantıyı hemen reddeden bir SMTP: gönderim denenir ama başarısız olur (testte e-posta gitmez)
+  await req('/api/profile', { method: 'PUT', cookie: admin, body: { smtpHost: '127.0.0.1', smtpPort: 1, smtpUser: 'u', smtpPassword: 'p' } })
+  assert.equal((await schedule({ subject: '', message: 'M', sendAt: inAnHour })).status, 400)
+  assert.equal((await schedule({ subject: 'S', message: 'M', sendAt: new Date(Date.now() - 60_000).toISOString() })).status, 400, 'geçmiş tarih reddedilmeli')
+  assert.equal((await schedule({ subject: 'S', message: 'M', sendAt: 'yarın' })).status, 400)
+  assert.equal((await schedule({ subject: 'S', message: 'M', sendAt: new Date(Date.now() + 400 * 86400_000).toISOString() })).status, 400)
+
+  const later = await schedule({ subject: 'Sonra', message: 'M', sendAt: inAnHour })
+  assert.equal(later.status, 200)
+  assert.equal(later.data.status, 'pending')
+  assert.equal(later.data.tag, '')
+  const tagged = await schedule({ subject: 'Etiketli', message: 'Merhaba', sendAt: inAnHour, tag: 'Yeni' })
+  assert.equal(tagged.data.tag, 'Yeni')
+
+  // Şimdi gönder: yalnızca "Yeni" etiketli 2 onaylı aboneye denenir
+  const now = await req('/api/admin/scheduled-newsletters', { method: 'PATCH', cookie: admin, body: { id: tagged.data.id, sendNow: true } })
+  assert.equal(now.status, 200)
+  assert.equal(now.data.status, 'failed')
+  assert.match(now.data.result, /^0\/2 gönderildi · 2 hata$/)
+  assert.equal((await req('/api/admin/scheduled-newsletters', { method: 'PATCH', cookie: admin, body: { id: tagged.data.id, sendNow: true } })).status, 404, 'gönderilmiş bülten tekrar gönderilmemeli')
+  const history = (await req('/api/admin/newsletter-history', { cookie: admin })).data
+  assert.equal(history[0].subject, 'Etiketli')
+  assert.equal(history[0].recipients, 2)
+
+  const list = (await req('/api/admin/scheduled-newsletters', { cookie: admin })).data
+  assert.equal(list.find((item) => item.id === later.data.id).status, 'pending', 'zamanı gelmeyen bülten beklemeli')
+
+  // İptal ve listeden kaldırma
+  for (const id of [later.data.id, tagged.data.id]) {
+    assert.equal((await req(`/api/admin/scheduled-newsletters?id=${id}`, { method: 'DELETE', cookie: admin })).status, 200)
+  }
+  assert.equal((await req(`/api/admin/scheduled-newsletters?id=${later.data.id}`, { method: 'DELETE', cookie: admin })).status, 404)
+  assert.deepEqual((await req('/api/admin/scheduled-newsletters', { cookie: admin })).data, [])
+
+  await req('/api/profile', { method: 'PUT', cookie: admin, body: { smtpHost: 'smtp.example.com', smtpPort: 587, smtpUser: '', smtpPassword: '' } })
+})
+
 test('giriş rate limit: sadece hatalı denemeler sayılır', async () => {
   for (let i = 0; i < 12; i++) {
     assert.equal((await req('/api/auth/login', { method: 'POST', headers: ip(40), body: { username: 'admin', password: PASSWORD } })).status, 200)

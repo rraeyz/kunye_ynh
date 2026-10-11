@@ -209,6 +209,7 @@ model Subscriber {
   email     String   @unique
   name      String   @default("")
   confirmed Boolean  @default(true) // E-posta onayı açıkken yeni aboneler onaylayana kadar false
+  tags      String   @default("") // Virgülle ayrılmış etiketler (ör. "müşteri, etkinlik")
   createdAt DateTime @default(now())
 }
 
@@ -294,6 +295,19 @@ model ContactReply {
 }
 
 // Abonelere gönderilen bültenlerin geçmişi
+// İleri bir tarihe planlanmış bülten; zamanı gelince otomatik gönderilir (lib/newsletter.ts)
+model ScheduledNewsletter {
+  id        Int      @id @default(autoincrement())
+  createdAt DateTime @default(now())
+  sendAt    DateTime
+  subject   String
+  message   String
+  tag       String   @default("") // Boşsa tüm onaylı abonelere
+  baseUrl   String   @default("") // Planlandığı andaki site adresi (linkler ve ikonlar için)
+  status    String   @default("pending") // pending | sending | sent | failed
+  result    String   @default("")
+}
+
 model NewsletterSend {
   id         Int      @id @default(autoincrement())
   createdAt  DateTime @default(now())

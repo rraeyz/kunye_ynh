@@ -5,6 +5,7 @@ import { prisma } from '@/lib/prisma'
 import { PROFILE_EDITABLE_FIELDS, PROFILE_SETTINGS_FIELDS, normalizeProfileCard, normalizeSettings } from '@/lib/profile'
 import { LINK_TYPES, isImageUrl, normalizeSlug, parseDate, parseImages, parseItems } from '@/lib/links'
 import { isSafeUrl, isValidEmail } from '@/lib/security'
+import { normalizeTags } from '@/lib/newsletter'
 import { FILE_NAME_PATTERN, UPLOAD_DIR } from '@/lib/uploads'
 import { BACKUP_FORMAT, BACKUP_FORMAT_VERSION, BackupKind, summarizeBackup } from '@/lib/backupFormat'
 import pkg from '../../package.json'
@@ -226,7 +227,7 @@ export async function restoreBackup(backup: any): Promise<RestoreResult | { erro
       const seenEmails = new Set<string>()
       const subscribers = (Array.isArray(backup.subscribers) ? backup.subscribers : [])
         .filter((s: any) => isValidEmail(s?.email) && !seenEmails.has(s.email.toLowerCase()) && seenEmails.add(s.email.toLowerCase()))
-        .map((s: any) => ({ email: String(s.email), name: str(s.name, 200), confirmed: s.confirmed !== false, createdAt: parseDate(s.createdAt) ?? new Date() }))
+        .map((s: any) => ({ email: String(s.email), name: str(s.name, 200), tags: normalizeTags(str(s.tags, 400)), confirmed: s.confirmed !== false, createdAt: parseDate(s.createdAt) ?? new Date() }))
       if (subscribers.length) await tx.subscriber.createMany({ data: subscribers })
       result.subscribers = subscribers.length
 

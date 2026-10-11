@@ -7,6 +7,7 @@ import { FILE_NAME_PATTERN, UPLOAD_DIR } from '@/lib/uploads'
 import { checkUrlStatus } from '@/lib/linkPreview'
 import { isSafeUrl } from '@/lib/security'
 import { sendWeeklyReport } from '@/lib/weeklyReport'
+import { sendDueNewsletters } from '@/lib/newsletter'
 
 // Günlük otomatik işler. src/instrumentation.ts açılışta başlatır; saatte bir bakılır, her iş kendi
 // son çalışma zamanını AppState'te tutar (yeniden başlatmalarda iki kez çalışmaz).
@@ -155,4 +156,18 @@ export function startScheduler() {
   // Açılışı yavaşlatmamak için ilk çalışma bir dakika sonra
   setTimeout(tick, 60_000).unref()
   setInterval(tick, HOUR).unref()
+
+  // Planlanmış bültenler dakikada bir kontrol edilir
+  let sending = false
+  setInterval(async () => {
+    if (sending) return
+    sending = true
+    try {
+      await sendDueNewsletters()
+    } catch (error) {
+      console.error('Planlanmış bülten gönderilemedi:', error)
+    } finally {
+      sending = false
+    }
+  }, 60_000).unref()
 }

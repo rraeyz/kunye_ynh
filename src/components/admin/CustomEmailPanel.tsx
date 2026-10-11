@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { FaPaperPlane, FaUser, FaUsers, FaFlask, FaTrashAlt, FaExclamationTriangle } from 'react-icons/fa'
+import { FaPaperPlane, FaUser, FaUsers, FaFlask, FaTrashAlt, FaExclamationTriangle, FaClock } from 'react-icons/fa'
 import RichTextEditor from './RichTextEditor'
 import SelectMenu from './SelectMenu'
 import type { AdminTab } from './adminNav'
@@ -22,6 +22,44 @@ const splitRecipients = (value: string) => {
   })
 }
 
+// Hazır şablonlar: konu ve mesaj iskeleti, köşeli parantezli yerler doldurulur
+const TEMPLATES: Array<{ label: string; subject: string; message: string }> = [
+  {
+    label: 'Bülten',
+    subject: '[Ay] bülteni: neler yaptım, neler geliyor',
+    message: 'Merhaba,\n\nBu ay neler oldu, kısaca paylaşmak istedim.\n\n**Bu ay**\n• [Tamamlanan iş ya da proje]\n• [Öne çıkan gelişme]\n\n**Yakında**\n• [Gelecek iş ya da duyuru]\n\n[Detaylar için tıkla](https://)\n\nGörüşmek üzere!',
+  },
+  {
+    label: 'Duyuru',
+    subject: 'Duyuru: [başlık]',
+    message: 'Merhaba,\n\n[Duyurunun kendisi; bir iki cümle.]\n\n**Ne zaman:** [tarih]\n**Nerede:** [yer ya da link]\n\n[Daha fazla bilgi](https://)',
+  },
+  {
+    label: 'Etkinlik daveti',
+    subject: '[Etkinlik adı] için davetlisin',
+    message: 'Merhaba,\n\n[Etkinlik adı] etkinliğine seni de bekliyorum.\n\n**Tarih:** [gün, saat]\n**Yer:** [adres ya da çevrim içi link]\n**Ne yapacağız:** [kısa açıklama]\n\n[Kayıt ol](https://)\n\nGörüşmek üzere!',
+  },
+  {
+    label: 'Yeni proje / ürün',
+    subject: 'Yeni: [proje ya da ürün adı]',
+    message: 'Merhaba,\n\nUzun zamandır üzerinde çalıştığım [proje ya da ürün adı] artık hazır!\n\n**Ne işe yarar:** [bir cümle]\n**Öne çıkanlar:**\n• [özellik]\n• [özellik]\n\n[İncele](https://)\n\nGeri bildirimini çok isterim.',
+  },
+  {
+    label: 'Teşekkür',
+    subject: 'Teşekkürler!',
+    message: 'Merhaba,\n\n[Neye teşekkür ettiğin; ör. bu yıl desteğin için] çok teşekkür ederim.\n\n[Kısa bir not ya da sonraki adım]\n\nSevgiyle,',
+  },
+]
+
+// lib/newsletter.ts tagKey ile aynı kural (ı/i aynı sayılır)
+const tagKey = (value: string) => value.trim().toLocaleLowerCase('tr-TR').replace(/ı/g, 'i')
+
+// datetime-local alanı için yerel saatle "YYYY-MM-DDTHH:mm"
+const localInputValue = (date: Date) => new Date(date.getTime() - date.getTimezoneOffset() * 60000).toISOString().slice(0, 16)
+
+type Scheduled = { id: number; sendAt: string; subject: string; tag: string; status: string; result: string }
+const STATUS_LABEL: Record<string, string> = { pending: 'Bekliyor', sending: 'Gönderiliyor', sent: 'Gönderildi', failed: 'Gönderilemedi' }
+
 const inputClass = 'w-full px-4 py-3 bg-dark-bg border border-gray-700 rounded-xl text-white focus:outline-none focus:border-purple-500 transition-colors'
 
 export default function CustomEmailPanel({ onNavigate }: { onNavigate?: (tab: AdminTab) => void }) {
@@ -35,7 +73,11 @@ export default function CustomEmailPanel({ onNavigate }: { onNavigate?: (tab: Ad
   const [fromAddress, setFromAddress] = useState('')
   const [smtpReady, setSmtpReady] = useState<boolean | null>(null)
   const [selfAddress, setSelfAddress] = useState('')
-  const [subscribers, setSubscribers] = useState<Array<{ id: number; email: string; name: string }>>([])
+  const [subscribers, setSubscribers] = useState<Array<{ id: number; email: string; name: string; tags?: string }>>([])
+  const [tag, setTag] = useState('')
+  const [scheduleOn, setScheduleOn] = useState(false)
+  const [scheduleAt, setScheduleAt] = useState('')
+  const [scheduled, setScheduled] = useState<Scheduled[]>([])
   const [history, setHistory] = useState<Array<{ id: number; createdAt: string; subject: string; recipients: number; sent: number; failed: number }>>([])
   const draftLoaded = useRef(false)
 
@@ -46,8 +88,29 @@ export default function CustomEmailPanel({ onNavigate }: { onNavigate?: (tab: Ad
     }).catch(() => {})
   }
 
+  const loadScheduled = () => {
+    fetch('/api/admin/scheduled-newsletters').then((r) => (r.ok ? r.json() : [])).then((list) => {
+      if (Array.isArray(list)) setScheduled(list)
+    }).catch(() => {})
+  }
+
+  const scheduledAction = async (item: Scheduled, action: 'send' | 'delete') => {
+    if (action === 'send' && !confirm(`"${item.subject}" şimdi gönderilsin mi?`)) return
+    if (action === 'delete' && item.status === 'pending' && !confirm(`"${item.subject}" planı iptal edilsin mi?`)) return
+    const response = action === 'send'
+      ? await fetch('/api/admin/scheduled-newsletters', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: item.id, sendNow: true }) }).catch(() => null)
+      : await fetch(`/api/admin/scheduled-newsletters?id=${item.id}`, { method: 'DELETE' }).catch(() => null)
+    if (!response?.ok) {
+      const data = await response?.json().catch(() => ({}))
+      setResult({ ok: false, text: data?.error || 'İşlem yapılamadı' })
+    }
+    loadScheduled()
+    loadHistory()
+  }
+
   // Profil (kendime test adresi) ve aboneler (öneri listesi + sayı)
   useEffect(() => {
+    loadScheduled()
     fetch('/api/profile').then((r) => (r.ok ? r.json() : null)).then((profile) => {
       if (profile) setSelfAddress(profile.contactEmail || profile.smtpFrom || profile.smtpUser || '')
     }).catch(() => {})
@@ -106,6 +169,18 @@ export default function CustomEmailPanel({ onNavigate }: { onNavigate?: (tab: Ad
   }, [subject, message, audience])
 
   const recipientList = useMemo(() => splitRecipients(recipients), [recipients])
+  const allTags = useMemo(() => Array.from(new Map(subscribers.flatMap((s) => (s.tags || '').split(',')).filter((t) => t.trim()).map((t) => [tagKey(t), t.trim()] as const)).values())
+    .sort((a, b) => a.localeCompare(b, 'tr')), [subscribers])
+  const audienceCount = tag ? subscribers.filter((s) => (s.tags || '').split(',').some((t) => tagKey(t) === tagKey(tag))).length : subscribers.length
+  const scheduling = audience === 'subscribers' && scheduleOn
+
+  const applyTemplate = (label: string) => {
+    const template = TEMPLATES.find((item) => item.label === label)
+    if (!template) return
+    if ((subject.trim() || message.trim()) && !confirm('Yazdıkların şablonla değiştirilsin mi?')) return
+    setSubject(template.subject)
+    setMessage(template.message)
+  }
   const tooMany = recipientList.length > MAX_RECIPIENTS
 
   const clearDraft = () => {
@@ -123,16 +198,45 @@ export default function CustomEmailPanel({ onNavigate }: { onNavigate?: (tab: Ad
       return
     }
     const toSubscribers = mode === 'send' && audience === 'subscribers'
+    if (toSubscribers && scheduleOn) {
+      const sendAt = new Date(scheduleAt)
+      if (!scheduleAt || Number.isNaN(sendAt.getTime()) || sendAt.getTime() <= Date.now()) {
+        setResult({ ok: false, text: 'Gelecekte bir tarih ve saat seç' })
+        return
+      }
+      setSending('send')
+      try {
+        const response = await fetch('/api/admin/scheduled-newsletters', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ subject, message, tag, sendAt: sendAt.toISOString() }),
+        })
+        const data = await response.json().catch(() => ({}))
+        if (!response.ok) {
+          setResult({ ok: false, text: data.error || 'Planlanamadı' })
+          return
+        }
+        clearDraft()
+        setScheduleOn(false)
+        loadScheduled()
+        setResult({ ok: true, text: `Planlandı: ${sendAt.toLocaleString('tr-TR', { dateStyle: 'medium', timeStyle: 'short' })}` })
+      } catch {
+        setResult({ ok: false, text: 'Bir hata oluştu' })
+      } finally {
+        setSending('')
+      }
+      return
+    }
     if (mode === 'send' && !toSubscribers && recipientList.length === 0) {
       setResult({ ok: false, text: 'En az bir alıcı gir' })
       return
     }
     if (toSubscribers) {
-      if (subscribers.length === 0) {
-        setResult({ ok: false, text: 'Henüz abone yok' })
+      if (audienceCount === 0) {
+        setResult({ ok: false, text: tag ? 'Bu etikette onaylı abone yok' : 'Henüz abone yok' })
         return
       }
-      if (!confirm(`Bu e-posta ${subscribers.length} aboneye gönderilecek. Devam edilsin mi?`)) return
+      if (!confirm(`Bu e-posta ${audienceCount} aboneye gönderilecek. Devam edilsin mi?`)) return
     }
 
     setSending(mode)
@@ -141,7 +245,7 @@ export default function CustomEmailPanel({ onNavigate }: { onNavigate?: (tab: Ad
         ? await fetch('/api/subscribers/bulk-email', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ subject, message }),
+            body: JSON.stringify({ subject, message, tag: tag || undefined }),
           })
         : await fetch('/api/admin/send-email', {
             method: 'POST',
@@ -247,14 +351,59 @@ export default function CustomEmailPanel({ onNavigate }: { onNavigate?: (tab: Ad
               </div>
             </>
           ) : (
-            <p className="text-sm text-gray-400 px-4 py-3 bg-dark-bg border border-gray-700 rounded-xl">
-              Her aboneye kendi adına &quot;Abonelikten çık&quot; linkiyle ayrı ayrı gönderilir. Belirli abonelere göndermek için Aboneler bölümünü kullan.
-            </p>
+            <div className="space-y-3">
+              {allTags.length > 0 && (
+                <SelectMenu
+                  ariaLabel="Etiket"
+                  value={tag}
+                  onChange={setTag}
+                  options={[{ value: '', label: 'Tüm aboneler' }, ...allTags.map((t) => ({ value: t, label: `Etiket: ${t}` }))]}
+                  className={inputClass}
+                />
+              )}
+              <p className="text-sm text-gray-400 px-4 py-3 bg-dark-bg border border-gray-700 rounded-xl">
+                {tag ? `"${tag}" etiketli ${audienceCount} aboneye` : 'Her aboneye'} kendi adına &quot;Abonelikten çık&quot; linkiyle ayrı ayrı gönderilir. Belirli abonelere göndermek için Aboneler bölümünü kullan.
+              </p>
+              <div className="flex flex-wrap items-center gap-3">
+                <label className="inline-flex items-center gap-2 text-sm text-gray-300 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={scheduleOn}
+                    onChange={(e) => {
+                      setScheduleOn(e.target.checked)
+                      if (e.target.checked && !scheduleAt) setScheduleAt(localInputValue(new Date(Date.now() + 60 * 60 * 1000)))
+                    }}
+                    className="w-4 h-4 rounded border-gray-600 bg-dark-bg text-purple-500 focus:ring-purple-500"
+                  />
+                  <FaClock className="w-3.5 h-3.5" /> İleri bir tarihe planla
+                </label>
+                {scheduleOn && (
+                  <input
+                    type="datetime-local"
+                    aria-label="Gönderim zamanı"
+                    value={scheduleAt}
+                    min={localInputValue(new Date())}
+                    onChange={(e) => setScheduleAt(e.target.value)}
+                    className="px-3 py-2 bg-dark-bg border border-gray-700 rounded-xl text-white text-sm focus:outline-none focus:border-purple-500 [color-scheme:dark]"
+                  />
+                )}
+              </div>
+            </div>
           )}
         </div>
 
         <div>
-          <label htmlFor="email-subject" className="block text-sm font-medium text-gray-300 mb-2">Konu</label>
+          <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
+            <label htmlFor="email-subject" className="block text-sm font-medium text-gray-300">Konu</label>
+            <SelectMenu
+              ariaLabel="Hazır şablon"
+              value=""
+              placeholder="Hazır şablon…"
+              onChange={applyTemplate}
+              options={TEMPLATES.map((item) => ({ value: item.label, label: item.label }))}
+              className="text-xs bg-dark-bg border border-gray-700 rounded-lg text-gray-300 px-2 py-1.5 w-[11rem] max-w-full"
+            />
+          </div>
           <input id="email-subject" type="text" maxLength={300} value={subject} onChange={(e) => setSubject(e.target.value)} placeholder="E-posta konusu" className={inputClass} />
         </div>
 
@@ -281,8 +430,8 @@ export default function CustomEmailPanel({ onNavigate }: { onNavigate?: (tab: Ad
             disabled={!!sending || (audience === 'people' && tooMany)}
             className="flex-1 min-w-[12rem] flex items-center justify-center gap-2 bg-purple-600 hover:bg-purple-500 text-white font-medium py-3 rounded-xl transition-colors disabled:opacity-50"
           >
-            <FaPaperPlane className="w-4 h-4" />
-            {sending === 'send' ? 'Gönderiliyor...' : audience === 'subscribers' ? `${subscribers.length} aboneye gönder` : recipientList.length > 1 ? `${recipientList.length} kişiye gönder` : 'Gönder'}
+            {scheduling ? <FaClock className="w-4 h-4" /> : <FaPaperPlane className="w-4 h-4" />}
+            {sending === 'send' ? (scheduling ? 'Planlanıyor...' : 'Gönderiliyor...') : scheduling ? 'Planla' : audience === 'subscribers' ? `${audienceCount} aboneye gönder` : recipientList.length > 1 ? `${recipientList.length} kişiye gönder` : 'Gönder'}
           </button>
           <button
             type="button"
@@ -300,6 +449,38 @@ export default function CustomEmailPanel({ onNavigate }: { onNavigate?: (tab: Ad
           İmza otomatik eklenir: profil fotoğrafı, şirket adı ve adresi (Ayarlar → E-posta İmzası) ve sosyal medya ikonları (Profil → Sosyal medya hesapları).
         </p>
 
+        {scheduled.length > 0 && (
+          <div className="pt-5 border-t border-gray-800">
+            <h3 className="text-sm font-medium text-gray-300 mb-2">Planlanmış bültenler</h3>
+            <ul className="divide-y divide-gray-800 border border-gray-800 rounded-xl text-sm">
+              {scheduled.slice(0, 20).map((item) => (
+                <li key={item.id} className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 px-4 py-2.5">
+                  <div className="min-w-0">
+                    <div className="text-gray-200 break-words">{item.subject}</div>
+                    <div className="text-xs text-gray-500">
+                      {new Date(item.sendAt).toLocaleString('tr-TR', { dateStyle: 'medium', timeStyle: 'short' })}
+                      {item.tag ? ` · etiket: ${item.tag}` : ' · tüm aboneler'}
+                      {' · '}
+                      <span className={item.status === 'failed' ? 'text-red-400' : item.status === 'sent' ? 'text-green-400' : 'text-amber-300'}>{STATUS_LABEL[item.status] || item.status}</span>
+                      {item.result && ` · ${item.result}`}
+                    </div>
+                  </div>
+                  <div className="flex gap-2 shrink-0">
+                    {item.status === 'pending' && (
+                      <button type="button" onClick={() => scheduledAction(item, 'send')} className="text-xs text-purple-300 hover:text-white">Şimdi gönder</button>
+                    )}
+                    {(item.status !== 'sending' || Date.now() - Date.parse(item.sendAt) > 60 * 60 * 1000) && (
+                      <button type="button" onClick={() => scheduledAction(item, 'delete')} className="text-xs text-gray-400 hover:text-red-400">
+                        {item.status === 'pending' ? 'İptal et' : 'Listeden kaldır'}
+                      </button>
+                    )}
+                  </div>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+
         {history.length > 0 && (
           <div className="pt-5 border-t border-gray-800">
             <h3 className="text-sm font-medium text-gray-300 mb-2">Bülten geçmişi</h3>
@@ -307,7 +488,7 @@ export default function CustomEmailPanel({ onNavigate }: { onNavigate?: (tab: Ad
               {history.slice(0, 10).map((item) => (
                 <li key={item.id} className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5 px-4 py-2.5">
                   <span className="text-gray-200 min-w-0 break-words">{item.subject}</span>
-                  <span className="text-xs text-gray-500 whitespace-nowrap">
+                  <span className="text-xs text-gray-500">
                     {new Date(item.createdAt).toLocaleString('tr-TR', { dateStyle: 'medium', timeStyle: 'short' })} · {item.sent}/{item.recipients} gönderildi
                     {item.failed > 0 && <span className="text-red-400"> · {item.failed} hata</span>}
                   </span>
