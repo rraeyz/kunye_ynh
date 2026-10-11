@@ -750,6 +750,39 @@ test('blok kopyalama', async () => {
   await req(`/api/links/${source.id}`, { method: 'PUT', cookie: admin, body: { slug: '' } })
 })
 
+test('mesajlara panelden yanıt', async () => {
+  await req('/api/profile', { method: 'PUT', cookie: admin, body: { contactEmail: 'ben@example.com' } })
+  assert.equal((await req('/api/contact', { method: 'POST', headers: ip(160), body: { name: 'Yanıt Testi', email: 'yt@example.com', message: 'Merhaba' } })).status, 200)
+  const message = (await req('/api/admin/messages', { cookie: admin })).data.find((m) => m.name === 'Yanıt Testi')
+  assert.deepEqual(message.replies, [], 'mesajlar yanıtlarıyla gelmeli')
+  const reply = (body, cookie = admin, id = message.id) => req(`/api/admin/messages/${id}/reply`, { method: 'POST', cookie, body })
+  assert.equal((await reply({ body: 'Selam' }, '')).status, 401)
+  assert.equal((await reply({ body: '   ' })).status, 400)
+  assert.equal((await reply({ body: 'Selam' }, admin, 999999)).status, 404)
+  const noSmtp = await reply({ body: 'Selam' })
+  assert.equal(noSmtp.status, 400, 'SMTP yokken gönderilmemeli')
+  assert.match(noSmtp.data.error, /SMTP/)
+  assert.deepEqual((await req('/api/admin/messages', { cookie: admin })).data.find((m) => m.id === message.id).replies, [], 'gönderilemeyen yanıt kaydedilmemeli')
+  await req(`/api/admin/messages/${message.id}`, { method: 'DELETE', cookie: admin })
+  await req('/api/profile', { method: 'PUT', cookie: admin, body: { contactEmail: '' } })
+})
+
+test('destek ol bloğu (birden fazla bağış platformu)', async () => {
+  const add = (body) => req('/api/links', { method: 'POST', cookie: admin, body })
+  assert.equal((await add({ type: 'support', title: 'Kötü', items: [{ platform: 'kofi', url: 'javascript:alert(1)' }] })).status, 400)
+  const res = await add({
+    type: 'support', title: 'Beni destekle', description: 'Kahve ısmarlayabilirsin',
+    items: [{ platform: 'shopier', url: 'https://www.shopier.com/x' }, { platform: 'buymeacoffee', url: 'https://www.buymeacoffee.com/x' }, { platform: 'uydurma', url: 'https://example.com/destek' }],
+  })
+  assert.equal(res.status, 200, JSON.stringify(res.data))
+  assert.equal(JSON.parse(res.data.items)[2].platform, 'other', 'bilinmeyen platform "Diğer" olmalı')
+  const home = (await req('/', { json: false })).text
+  for (const text of ['Beni destekle', 'Kahve ısmarlayabilirsin', 'Shopier', 'Buy Me a Coffee', 'https://www.shopier.com/x', 'Diğer']) {
+    assert.ok(home.includes(text), `ana sayfada olmalı: ${text}`)
+  }
+  await req(`/api/links/${res.data.id}`, { method: 'DELETE', cookie: admin })
+})
+
 test('giriş rate limit: sadece hatalı denemeler sayılır', async () => {
   for (let i = 0; i < 12; i++) {
     assert.equal((await req('/api/auth/login', { method: 'POST', headers: ip(40), body: { username: 'admin', password: PASSWORD } })).status, 200)

@@ -1,7 +1,8 @@
 # Yol haritası
 
 Sıra: önce kolay ve kısa işler, en sonda uzun ve hata çıkarmaya yatkın olanlar. Her adım ayrı commit'lenir
-ve testten geçer; oturum yarıda kalırsa bir sonraki işaretsiz adımdan devam edilir.
+ve testten geçer; oturum yarıda kalırsa bir sonraki işaretsiz adımdan devam edilir. Aşama içinde sıra
+kullanıcının önceliğine göre değişebilir (ör. 2.7 öne alındı).
 
 ## Aşama 1: kolay ve kısa
 - [x] 1.1 Liste blokları: ayırıcı/bölüm başlığı, beceri rozetleri, kupon kodu (kopyala), referanslar, SSS, zaman çizelgesi
@@ -11,13 +12,13 @@ ve testten geçer; oturum yarıda kalırsa bir sonraki işaretsiz adımdan devam
 - [x] 1.5 Blok kopyalama
 
 ## Aşama 2: orta
-- [ ] 2.1 Bağış bloğu (Shopier, Buy Me a Coffee, Ko-fi, Patreon...; birden fazlası birlikte)
+- [x] 2.1 Bağış bloğu (Shopier, Buy Me a Coffee, Ko-fi, Patreon...; birden fazlası birlikte)
 - [ ] 2.2 Sayfa içi arama
 - [ ] 2.3 Toplu düzenleme (çoklu seçim: gizle, sil, kategori)
 - [ ] 2.4 Linke tarihli hatırlatma notu
 - [ ] 2.5 Gerçek zamanlı ziyaretçi ("şu an X kişi")
 - [ ] 2.6 Planlanmış bülten gönderimi
-- [ ] 2.7 Mesajlara panelden yanıt + konuşma geçmişi
+- [x] 2.7 Mesajlara panelden yanıt + konuşma geçmişi
 - [ ] 2.8 Kısa link yönetimi (/go linkleri, QR, tıklama)
 - [ ] 2.9 Aylık rapor (yazdırılabilir sayfa → PDF)
 
@@ -32,6 +33,10 @@ ve testten geçer; oturum yarıda kalırsa bir sonraki işaretsiz adımdan devam
 - [ ] 3.8 İki dilli sayfa (TR/EN)
 - [ ] 3.9 Canlı yayın durumu (Twitch/YouTube; geliştirici anahtarı ister)
 - [ ] 3.10 API anahtarı + kullanım eğitimi
+
+## Açık sorun
+- Otomatik görsel temizliği KAPALI (src/lib/jobs.ts). Bir kurulumda kapak, galeri ve favicon dosyaları kayboldu;
+  sebep kesinleşmedi (temizlik şüpheli). Açmadan önce sebep bulunmalı.
 
 ## Bekleyen, istenmemiş güvenlik notları
 - Docker kurulumunda kurulum anahtarı (SETUP_TOKEN) üretilmiyor

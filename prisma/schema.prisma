@@ -277,8 +277,20 @@ model ContactMessage {
   message   String
   read      Boolean  @default(false)
   emailed   Boolean  @default(false) // Admin'e e-posta olarak da gitti mi
+  replies   ContactReply[]
 
   @@index([createdAt])
+}
+
+// Panelden mesaja gönderilen yanıtlar (konuşma geçmişi)
+model ContactReply {
+  id        Int            @id @default(autoincrement())
+  messageId Int
+  message   ContactMessage @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  createdAt DateTime       @default(now())
+  body      String
+
+  @@index([messageId])
 }
 
 // Abonelere gönderilen bültenlerin geçmişi
