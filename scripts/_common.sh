@@ -15,8 +15,12 @@ fetch_app_source() {
     [ -n "${install_dir:-}" ] || ynh_die --message="install_dir tanımlı değil"
     tmp_dir=$(mktemp -d)
 
-    git clone --depth 1 --branch "$source_branch" "$source_repo" "$tmp_dir/src"
+    # --quiet: git ilerleme mesajlarını stderr'e yazar, YunoHost bunları "Warning" olarak gösteriyordu
+    git clone --quiet --depth 1 --branch "$source_branch" "$source_repo" "$tmp_dir/src"
     rm -rf "$tmp_dir/src/.git"
+    # Repodaki docker-compose.yml düz Docker kurulumu içindir; YunoHost kendi dosyasını conf/ şablonundan
+    # üretir. Kopyalanırsa üretilen dosyanın üstüne yazıp "manually modified" uyarısına yol açıyordu.
+    rm -f "$tmp_dir/src/docker-compose.yml"
 
     mkdir -p "$install_dir"
     # Eski dosyaları temizle (silinen dosyalar build'e karışmasın), sonra yenisini kopyala

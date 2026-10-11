@@ -1,3 +1,8 @@
+# 1.5.0~ynh2 (YunoHost paketi)
+
+- Güncellemede çıkan "docker-compose.yml has been manually modified" uyarısı giderildi. Uyarı zararsızdı: repodaki düz Docker dosyası, YunoHost'un ürettiği dosyanın üstüne kopyalanıyor, YunoHost da hemen ardından doğrusunu yeniden yazıyordu. Artık o dosya hiç kopyalanmıyor.
+- Kaynak kod çekilirken git'in ilerleme mesajları ("Cloning into...") artık uyarı olarak görünmüyor.
+
 # 1.5.0
 
 ### 🔐 Güvenlik
