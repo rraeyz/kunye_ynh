@@ -8,6 +8,7 @@ import {
   FaGithub, FaTwitter, FaLinkedin, FaInstagram, FaYoutube, FaGlobe, FaEnvelope, FaDiscord, FaMedium, FaLink, FaDonate, FaPhone,
   FaMapMarkerAlt, FaCalendarAlt, FaFileAlt, FaMusic, FaVideo, FaGamepad, FaCamera, FaBook, FaHeart, FaShoppingCart, FaUser, FaUsers,
   FaCode, FaCogs, FaCloud, FaAlignLeft, FaBriefcase, FaHourglassHalf, FaImages, FaSpotify, FaExclamationTriangle,
+  FaHeading, FaTags, FaQuestionCircle, FaStream, FaQuoteLeft, FaTicketAlt,
 } from 'react-icons/fa'
 import { healthLabel, isBrokenStatus } from '@/lib/linkHealth'
 import { SiTelegram } from 'react-icons/si'
@@ -83,7 +84,7 @@ const linkCategories = [
 
 
 // Blok tipleri (gruplu). fields: formda gösterilecek alanlar
-type Field = 'url' | 'urlOptional' | 'icon' | 'thumbnail' | 'featured' | 'password' | 'slug' | 'description' | 'images' | 'targetDate'
+type Field = 'url' | 'urlOptional' | 'icon' | 'thumbnail' | 'featured' | 'password' | 'slug' | 'description' | 'images' | 'targetDate' | 'items'
 
 const linkTypes: Array<{ value: string; label: string; icon: string; description: string; group: string; fields: Field[] }> = [
   { value: 'link', label: 'Normal Link', icon: 'FaLink', description: 'Başka sayfaya yönlendir', group: 'Linkler', fields: ['url', 'description', 'icon', 'thumbnail', 'featured', 'password', 'slug'] },
@@ -92,12 +93,53 @@ const linkTypes: Array<{ value: string; label: string; icon: string; description
   { value: 'text', label: 'Metin', icon: 'FaAlignLeft', description: 'Başlık ve paragraf', group: 'İçerik', fields: ['description'] },
   { value: 'portfolio', label: 'Portfolyo Kartı', icon: 'FaBriefcase', description: 'Görsel + açıklama', group: 'İçerik', fields: ['urlOptional', 'thumbnail', 'description', 'featured'] },
   { value: 'countdown', label: 'Geri Sayım', icon: 'FaHourglassHalf', description: 'Etkinliğe kalan süre', group: 'İçerik', fields: ['targetDate', 'description', 'urlOptional'] },
+  { value: 'heading', label: 'Bölüm Başlığı', icon: 'FaHeading', description: 'Blokları bölümlere ayır', group: 'Düzen', fields: ['description'] },
+  { value: 'skills', label: 'Rozetler', icon: 'FaTags', description: 'Beceri / araç etiketleri', group: 'Düzen', fields: ['items'] },
+  { value: 'faq', label: 'SSS', icon: 'FaQuestionCircle', description: 'Açılır soru-cevap', group: 'Düzen', fields: ['items'] },
+  { value: 'timeline', label: 'Zaman Çizelgesi', icon: 'FaStream', description: 'Kariyer, eğitim', group: 'Düzen', fields: ['items'] },
+  { value: 'testimonials', label: 'Referanslar', icon: 'FaQuoteLeft', description: 'Yorum kartları', group: 'Düzen', fields: ['items'] },
+  { value: 'coupon', label: 'Kupon Kodu', icon: 'FaTicketAlt', description: 'Kopyalanabilir kod', group: 'Linkler', fields: ['description', 'urlOptional'] },
   { value: 'gallery', label: 'Galeri', icon: 'FaImages', description: 'Fotoğraf ızgarası', group: 'Medya', fields: ['images'] },
   { value: 'spotify', label: 'Spotify', icon: 'FaSpotify', description: 'Şarkı / çalma listesi', group: 'Medya', fields: ['url'] },
   { value: 'embed-youtube', label: 'YouTube', icon: 'FaYoutube', description: 'Video göm', group: 'Medya', fields: ['url'] },
   { value: 'embed-twitter', label: 'X (Twitter)', icon: 'FaTwitter', description: 'Gönderi göm', group: 'Medya', fields: ['url'] },
   { value: 'embed-instagram', label: 'Instagram', icon: 'FaInstagram', description: 'Gönderi göm', group: 'Medya', fields: ['url'] },
 ]
+
+// Liste bloklarının satır alanları: anahtarlar sunucudaki ITEM_FIELDS (lib/links) ile aynı
+type ItemField = { key: string; label: string; placeholder: string; multiline?: boolean }
+const ITEM_FORMS: Record<string, { addLabel: string; fields: ItemField[] }> = {
+  skills: { addLabel: 'Rozet ekle', fields: [{ key: 'label', label: 'Etiket', placeholder: 'React' }] },
+  faq: {
+    addLabel: 'Soru ekle',
+    fields: [
+      { key: 'q', label: 'Soru', placeholder: 'Ders veriyor musun?' },
+      { key: 'a', label: 'Cevap', placeholder: 'Evet, haftada iki gün...', multiline: true },
+    ],
+  },
+  timeline: {
+    addLabel: 'Satır ekle',
+    fields: [
+      { key: 'date', label: 'Tarih', placeholder: '2021 – 2024' },
+      { key: 'title', label: 'Başlık', placeholder: 'Yazılım Geliştirici, Örnek A.Ş.' },
+      { key: 'text', label: 'Açıklama (opsiyonel)', placeholder: 'Neler yaptın?', multiline: true },
+    ],
+  },
+  testimonials: {
+    addLabel: 'Referans ekle',
+    fields: [
+      { key: 'quote', label: 'Yorum', placeholder: 'Birlikte çalışmak çok keyifliydi...', multiline: true },
+      { key: 'name', label: 'İsim', placeholder: 'Ayşe Yılmaz' },
+      { key: 'role', label: 'Unvan / şirket (opsiyonel)', placeholder: 'Ürün Müdürü, Örnek' },
+    ],
+  },
+}
+const MAX_ITEMS = 50
+
+const TITLE_PLACEHOLDERS: Record<string, string> = {
+  text: 'Hakkımda', heading: 'Projelerim (boş bırakılırsa ince çizgi)', skills: 'Kullandığım araçlar',
+  faq: 'Sıkça sorulanlar', timeline: 'Deneyim', testimonials: 'Hakkımda söylenenler', coupon: 'Mağazamda %10 indirim',
+}
 
 const typeInfo = (type: string) => linkTypes.find((t) => t.value === type) || linkTypes[0]
 
@@ -116,6 +158,7 @@ const PANEL_ICONS: Record<string, IconType> = {
   FaLink, FaDonate, FaPhone, FaMapMarkerAlt, FaCalendarAlt, FaFileAlt, FaMusic, FaVideo, FaGamepad, FaCamera,
   FaBook, FaHeart, FaStar, FaShoppingCart, FaUser, FaUsers, FaCode, FaCogs, FaCloud,
   FaAlignLeft, FaBriefcase, FaHourglassHalf, FaImages, FaSpotify,
+  FaHeading, FaTags, FaQuestionCircle, FaStream, FaQuoteLeft, FaTicketAlt,
 }
 const getIconComponent = (iconName: string): IconType => PANEL_ICONS[iconName] || FaLink
 
@@ -148,17 +191,20 @@ type FormData = {
   description: string
   images: string[]
   targetDate: string
+  items: Array<Record<string, string>>
 }
 
 const emptyForm = (): FormData => ({
   title: '', url: '', icon: 'FaLink', customIconUrl: '', useCustomIcon: false, category: '', type: 'link',
   password: '', passwordHint: '', hasExistingPassword: false, removePassword: false, slug: '',
-  startDate: '', endDate: '', featured: false, thumbnail: '', description: '', images: [], targetDate: '',
+  startDate: '', endDate: '', featured: false, thumbnail: '', description: '', images: [], targetDate: '', items: [],
 })
 
 const formFromLink = (link: any): FormData => {
   let images: string[] = []
   try { images = JSON.parse(link.images || '[]') } catch {}
+  let items: Array<Record<string, string>> = []
+  try { items = JSON.parse(link.items || '[]') } catch {}
   const customIcon = (link.icon || '').startsWith('http')
   return {
     title: link.title || '',
@@ -180,6 +226,7 @@ const formFromLink = (link: any): FormData => {
     description: link.description || '',
     images: Array.isArray(images) ? images : [],
     targetDate: toLocalInput(link.targetDate),
+    items: Array.isArray(items) ? items : [],
   }
 }
 
@@ -198,6 +245,7 @@ const payloadFromForm = (form: FormData, mode: 'add' | 'edit') => {
     thumbnail: fields.includes('thumbnail') ? form.thumbnail : '',
     description: fields.includes('description') ? form.description : '',
     images: fields.includes('images') ? form.images : [],
+    items: fields.includes('items') ? form.items : [],
     targetDate: fields.includes('targetDate') ? fromLocalInput(form.targetDate) : null,
     slug: fields.includes('slug') ? form.slug : '',
     passwordHint: form.passwordHint,
@@ -221,7 +269,7 @@ const labelClass = 'block text-sm font-medium text-gray-300 mb-2'
 function TypePicker({ value, onPick }: { value?: string; onPick: (type: string) => void }) {
   return (
     <div>
-      {['Linkler', 'İçerik', 'Medya'].map((group) => (
+      {['Linkler', 'İçerik', 'Düzen', 'Medya'].map((group) => (
         <div key={group} className="mb-3 last:mb-0">
           <div className="text-xs uppercase tracking-wider text-gray-500 mb-2">{group}</div>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
@@ -246,6 +294,48 @@ function TypePicker({ value, onPick }: { value?: string; onPick: (type: string) 
           </div>
         </div>
       ))}
+    </div>
+  )
+}
+
+// Liste bloklarının satırları: ekle, sil, yukarı/aşağı taşı
+function ItemsEditor({ type, items, onChange }: { type: string; items: Array<Record<string, string>>; onChange: (items: Array<Record<string, string>>) => void }) {
+  const config = ITEM_FORMS[type]
+  const update = (index: number, key: string, value: string) => onChange(items.map((item, i) => (i === index ? { ...item, [key]: value } : item)))
+  const move = (index: number, delta: number) => {
+    const next = [...items]
+    ;[next[index], next[index + delta]] = [next[index + delta], next[index]]
+    onChange(next)
+  }
+  const compact = config.fields.length === 1
+  return (
+    <div>
+      <label className={labelClass}>Satırlar ({items.length}/{MAX_ITEMS})</label>
+      <div className="space-y-2">
+        {items.map((item, index) => (
+          <div key={index} className={`flex gap-2 ${compact ? 'items-center' : 'items-start p-3 bg-dark-bg border border-gray-700 rounded-lg'}`}>
+            <div className={`flex-1 min-w-0 ${compact ? '' : 'space-y-2'}`}>
+              {config.fields.map((field) => (
+                field.multiline ? (
+                  <textarea key={field.key} aria-label={`${index + 1}. satır: ${field.label}`} value={item[field.key] || ''} onChange={(e) => update(index, field.key, e.target.value)} rows={2} className={`${inputClass} resize-y`} placeholder={`${field.label}: ${field.placeholder}`} />
+                ) : (
+                  <input key={field.key} type="text" aria-label={`${index + 1}. satır: ${field.label}`} value={item[field.key] || ''} onChange={(e) => update(index, field.key, e.target.value)} className={inputClass} placeholder={compact ? field.placeholder : `${field.label}: ${field.placeholder}`} />
+                )
+              ))}
+            </div>
+            <div className={`flex shrink-0 ${compact ? 'gap-1' : 'flex-col gap-1'}`}>
+              <button type="button" onClick={() => move(index, -1)} disabled={index === 0} aria-label={`${index + 1}. satırı yukarı taşı`} className="p-2 rounded text-gray-400 hover:text-white hover:bg-white/10 disabled:opacity-25"><FaChevronUp className="w-3 h-3" /></button>
+              <button type="button" onClick={() => move(index, 1)} disabled={index === items.length - 1} aria-label={`${index + 1}. satırı aşağı taşı`} className="p-2 rounded text-gray-400 hover:text-white hover:bg-white/10 disabled:opacity-25"><FaChevronDown className="w-3 h-3" /></button>
+              <button type="button" onClick={() => onChange(items.filter((_, i) => i !== index))} aria-label={`${index + 1}. satırı sil`} className="p-2 rounded text-red-400 hover:bg-red-500/10"><FaTrash className="w-3 h-3" /></button>
+            </div>
+          </div>
+        ))}
+      </div>
+      {items.length < MAX_ITEMS && (
+        <button type="button" onClick={() => onChange([...items, Object.fromEntries(config.fields.map((field) => [field.key, '']))])} className="mt-2 inline-flex items-center gap-2 px-4 py-2 bg-purple-500/10 hover:bg-purple-500/20 text-purple-300 rounded-lg text-sm">
+          <FaPlus className="w-3 h-3" aria-hidden="true" />{config.addLabel}
+        </button>
+      )}
     </div>
   )
 }
@@ -304,21 +394,29 @@ function LinkFormFields({ form, setForm, mode }: { form: FormData; setForm: (f: 
 
       <div>
         <label className={labelClass}>Başlık</label>
-        <input type="text" value={form.title} onChange={(e) => set({ title: e.target.value })} className={inputClass} placeholder={form.type === 'text' ? 'Hakkımda' : 'GitHub Profilim'} />
+        <input type="text" value={form.title} onChange={(e) => set({ title: e.target.value })} className={inputClass} placeholder={TITLE_PLACEHOLDERS[form.type] || 'GitHub Profilim'} />
       </div>
 
       {(has('url') || has('urlOptional')) && (
         <div>
-          <label className={labelClass}>{has('url') ? 'URL' : 'Link (opsiyonel)'}</label>
+          <label className={labelClass}>{has('url') ? 'URL' : form.type === 'coupon' ? 'Mağaza linki (opsiyonel)' : 'Link (opsiyonel)'}</label>
           <input type="url" value={form.url} onChange={(e) => set({ url: e.target.value })} className={inputClass} placeholder={URL_PLACEHOLDERS[form.type] || 'https://...'} />
         </div>
       )}
 
       {has('description') && (
         <div>
-          <label className={labelClass}>{form.type === 'text' ? 'Metin' : has('url') ? 'Kısa açıklama (opsiyonel)' : 'Açıklama'}</label>
-          <textarea value={form.description} onChange={(e) => set({ description: e.target.value })} rows={form.type === 'text' ? 5 : has('url') ? 2 : 3} className={`${inputClass} resize-y`} placeholder={form.type === 'text' ? 'Kendinizden veya duyurunuzdan bahsedin...' : has('url') ? 'Başlığın altında küçük yazı olarak görünür' : 'Kısa açıklama'} />
+          <label className={labelClass}>{form.type === 'text' ? 'Metin' : form.type === 'coupon' ? 'Kupon kodu' : form.type === 'heading' ? 'Alt yazı (opsiyonel)' : has('url') ? 'Kısa açıklama (opsiyonel)' : 'Açıklama'}</label>
+          {form.type === 'coupon' ? (
+            <input type="text" value={form.description} onChange={(e) => set({ description: e.target.value })} className={`${inputClass} font-mono`} placeholder="INDIRIM10" />
+          ) : (
+            <textarea value={form.description} onChange={(e) => set({ description: e.target.value })} rows={form.type === 'text' ? 5 : has('url') || form.type === 'heading' ? 2 : 3} className={`${inputClass} resize-y`} placeholder={form.type === 'text' ? 'Kendinizden veya duyurunuzdan bahsedin...' : has('url') ? 'Başlığın altında küçük yazı olarak görünür' : form.type === 'heading' ? 'Başlığın altında küçük yazı' : 'Kısa açıklama'} />
+          )}
         </div>
+      )}
+
+      {has('items') && ITEM_FORMS[form.type] && (
+        <ItemsEditor type={form.type} items={form.items} onChange={(items) => set({ items })} />
       )}
 
       {has('targetDate') && (
@@ -493,6 +591,9 @@ function SortableLinkItem({ link, onToggle, onEdit, onMoveUp, onMoveDown, editin
   if (link.type === 'gallery') { try { subtitle = `${JSON.parse(link.images || '[]').length} görsel` } catch { subtitle = '' } }
   if (link.type === 'countdown') subtitle = link.targetDate ? new Date(link.targetDate).toLocaleString('tr-TR') : 'Tarih yok'
   if (link.type === 'contact') subtitle = 'İletişim formu'
+  if (link.type === 'heading') subtitle = link.title ? 'Bölüm başlığı' : 'Ayırıcı çizgi'
+  if (link.type === 'coupon') subtitle = `Kod: ${link.description || '-'}`
+  if (ITEM_FORMS[link.type]) { try { subtitle = `${JSON.parse(link.items || '[]').length} satır` } catch { subtitle = '0 satır' } }
 
   return (
     <div ref={setNodeRef} style={style} className={`bg-dark-bg rounded-xl border ${editing ? 'border-purple-500/60' : link.featured ? 'border-yellow-500/40' : 'border-gray-700'}`}>
@@ -647,7 +748,9 @@ export default function LinksEditor({ initialLinks, autoAdd, onAutoAddHandled }:
 
   const handleSave = async () => {
     setError('')
-    if (!form.title.trim()) return setError('Başlık gerekli')
+    // Bölüm başlığı boş bırakılırsa ayırıcı çizgi olur
+    if (!form.title.trim() && form.type !== 'heading') return setError('Başlık gerekli')
+    if (form.type === 'coupon' && !form.description.trim()) return setError('Kupon kodu gerekli')
     setSaving(true)
     try {
       const response = await fetch(mode === 'edit' ? `/api/links/${editingId}` : '/api/links', {

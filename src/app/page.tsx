@@ -16,7 +16,13 @@ import GalleryBlock from '@/components/blocks/GalleryBlock'
 import SpotifyBlock from '@/components/blocks/SpotifyBlock'
 import CountdownBlock from '@/components/blocks/CountdownBlock'
 import PortfolioCard from '@/components/blocks/PortfolioCard'
-import { parseImages, spotifyEmbedUrl } from '@/lib/links'
+import HeadingBlock from '@/components/blocks/HeadingBlock'
+import SkillsBlock from '@/components/blocks/SkillsBlock'
+import TestimonialsBlock from '@/components/blocks/TestimonialsBlock'
+import FaqBlock from '@/components/blocks/FaqBlock'
+import TimelineBlock from '@/components/blocks/TimelineBlock'
+import CouponBlock from '@/components/blocks/CouponBlock'
+import { ITEM_FIELDS, parseImages, parseItems, spotifyEmbedUrl } from '@/lib/links'
 import { isSafeUrl } from '@/lib/security'
 import { renderLinkIcon } from '@/lib/linkIcon'
 import { hasInlineImages, migrateInlineImages } from '@/lib/uploads'
@@ -91,7 +97,10 @@ export default async function Home({ searchParams }: { searchParams?: { link?: s
       case 'gallery': return parseImages(link.images).length > 0
       case 'spotify': return !!spotifyEmbedUrl(link.url)
       case 'countdown': return !!link.targetDate
-      default: return true
+      case 'coupon': return !!link.description?.trim()
+      // Ayırıcı başlıksız da olabilir (yalnızca çizgi)
+      case 'heading': return true
+      default: return ITEM_FIELDS[link.type] ? parseItems(link.type, link.items).length > 0 : true
     }
   }
   const visibleLinks = links.filter(hasContent)
@@ -134,6 +143,18 @@ export default async function Home({ searchParams }: { searchParams?: { link?: s
             featured={link.featured}
           />
         )
+      case 'heading':
+        return <HeadingBlock title={link.title} text={link.description} />
+      case 'skills':
+        return <SkillsBlock title={link.title} items={parseItems('skills', link.items)} />
+      case 'testimonials':
+        return <TestimonialsBlock title={link.title} items={parseItems('testimonials', link.items)} />
+      case 'faq':
+        return <FaqBlock title={link.title} items={parseItems('faq', link.items)} />
+      case 'timeline':
+        return <TimelineBlock title={link.title} items={parseItems('timeline', link.items)} />
+      case 'coupon':
+        return <CouponBlock linkId={link.id} title={link.title} code={link.description.trim()} url={link.url} />
       case 'embed-youtube':
       case 'embed-twitter':
       case 'embed-instagram':

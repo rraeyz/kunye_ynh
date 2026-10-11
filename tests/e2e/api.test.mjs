@@ -608,6 +608,48 @@ test('paylaşım görseli, yapısal veri ve içerik güvenlik politikası', asyn
   assert.ok(csp.includes("object-src 'none'") && csp.includes("frame-ancestors 'self'"))
 })
 
+test('liste blokları: başlık, rozetler, SSS, zaman çizelgesi, referanslar, kupon', async () => {
+  const add = (body) => req('/api/links', { method: 'POST', cookie: admin, body })
+  const created = []
+  const make = async (body) => {
+    const res = await add(body)
+    assert.equal(res.status, 200, `${body.type}: ${JSON.stringify(res.data)}`)
+    created.push(res.data.id)
+    return res.data
+  }
+  await make({ type: 'heading', title: 'Bölüm Bir', description: 'Alt yazı burada' })
+  await make({ type: 'heading', title: '' }) // başlıksız: ayırıcı çizgi
+  const skills = await make({ type: 'skills', title: 'Araçlar', items: [{ label: 'TypeScript' }, { label: '' }, { label: 'Figma', kotu: 'x' }] })
+  assert.deepEqual(JSON.parse(skills.items), [{ label: 'TypeScript' }, { label: 'Figma' }], 'boş satırlar ve bilinmeyen alanlar atılmalı')
+  await make({ type: 'faq', title: 'SSS', items: [{ q: 'Ders veriyor musun?', a: 'Evet <b>bazen</b>' }] })
+  await make({ type: 'timeline', title: 'Deneyim', items: [{ date: '2021 – 2024', title: 'Geliştirici', text: 'Örnek A.Ş.' }] })
+  await make({ type: 'testimonials', title: 'Referanslar', items: [{ quote: 'Harika iş', name: 'Ayşe', role: 'Müdür' }] })
+  await make({ type: 'coupon', title: 'İndirim', description: 'KUPON10', url: 'https://example.com/magaza' })
+  assert.equal((await add({ type: 'coupon', title: 'Kötü', description: 'X', url: 'javascript:alert(1)' })).status, 400)
+  assert.equal((await add({ type: 'skills', title: 'Çok', items: Array.from({ length: 51 }, (_, i) => ({ label: `e${i}` })) })).status, 400)
+  const empty = await make({ type: 'faq', title: 'Boş SSS', items: [] })
+
+  const home = (await req('/', { json: false })).text
+  for (const text of ['Bölüm Bir', 'Alt yazı burada', 'TypeScript', 'Figma', 'Ders veriyor musun?', '2021 – 2024', 'Harika iş', 'KUPON10', '<hr']) {
+    assert.ok(home.includes(text), `ana sayfada olmalı: ${text}`)
+  }
+  assert.ok(home.includes('Evet &lt;b&gt;bazen&lt;/b&gt;'), 'satır metni HTML olarak çalışmamalı')
+  assert.ok(!home.includes('Boş SSS'), 'satırı olmayan blok çizilmemeli')
+
+  // Yedek blok satırlarını korur
+  const settings = (await req('/api/admin/backup?kind=settings', { cookie: admin })).data
+  assert.deepEqual(JSON.parse(settings.links.find((l) => l.id === skills.id).items), [{ label: 'TypeScript' }, { label: 'Figma' }])
+
+  // Düzenleme: yalnızca satırlar değişir
+  const edit = await req(`/api/links/${skills.id}`, { method: 'PUT', cookie: admin, body: { items: [{ label: 'Rust' }] } })
+  assert.equal(edit.status, 200)
+  assert.deepEqual(JSON.parse(edit.data.items), [{ label: 'Rust' }])
+
+  for (const id of created) await req(`/api/links/${id}`, { method: 'DELETE', cookie: admin })
+  assert.ok(!(await req('/', { json: false })).text.includes('Bölüm Bir'))
+  assert.ok(empty.id)
+})
+
 test('giriş rate limit: sadece hatalı denemeler sayılır', async () => {
   for (let i = 0; i < 12; i++) {
     assert.equal((await req('/api/auth/login', { method: 'POST', headers: ip(40), body: { username: 'admin', password: PASSWORD } })).status, 200)

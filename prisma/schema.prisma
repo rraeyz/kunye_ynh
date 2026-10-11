@@ -111,7 +111,7 @@ model Link {
   enabled   Boolean  @default(true)
   
   // Link Type (normal link, contact form, donation, etc)
-  type      String   @default("link") // link, contact, donation, embed-*, text, gallery, spotify, countdown, portfolio
+  type      String   @default("link") // link, contact, donation, embed-*, text, gallery, spotify, countdown, portfolio, heading, skills, coupon, testimonials, faq, timeline
   
   // Password Protection
   password  String   @default("") // Empty = no password, bcrypt hash if protected
@@ -136,6 +136,8 @@ model Link {
   description String   @default("")    // Metin bloğu içeriği, portfolyo/geri sayım açıklaması
   images      String   @default("")    // Galeri: JSON dizi olarak görsel adresleri
   targetDate  DateTime?                // Geri sayım hedef tarihi
+  items       String   @default("")    // Liste blokları (SSS, referanslar, zaman çizelgesi, rozetler): JSON dizi
+  price       String   @default("")    // Ürün kartı fiyatı (serbest metin: "₺250", "29 $")
 
   // Link sağlık kontrolü: 0 = kontrol edilmedi, HTTP durum kodu, -1 = ulaşılamadı
   healthStatus    Int       @default(0)

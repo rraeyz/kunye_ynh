@@ -6,12 +6,44 @@ export const LINK_TYPES = [
   'link', 'contact', 'donation',
   'embed-youtube', 'embed-twitter', 'embed-instagram',
   'text', 'gallery', 'spotify', 'countdown', 'portfolio',
+  'heading', 'skills', 'coupon', 'testimonials', 'faq', 'timeline',
 ] as const
+
+// Liste bloklarının satır alanları (Link.items, JSON dizi). Panel formu ve sayfa da buradan okur.
+export const ITEM_FIELDS: Record<string, readonly string[]> = {
+  skills: ['label'],
+  testimonials: ['quote', 'name', 'role'],
+  faq: ['q', 'a'],
+  timeline: ['date', 'title', 'text'],
+}
+const MAX_ITEMS = 50
+
+export type BlockItem = Record<string, string>
+
+// Kayıtlı JSON'dan güvenli satırlar: yalnızca bilinen alanlar, metin, boş satırlar atılır
+export function parseItems(type: string, value: unknown): BlockItem[] {
+  const fields = ITEM_FIELDS[type]
+  if (!fields) return []
+  let raw: unknown = value
+  if (typeof value === 'string') {
+    try {
+      raw = JSON.parse(value || '[]')
+    } catch {
+      return []
+    }
+  }
+  if (!Array.isArray(raw)) return []
+  return raw
+    .filter((item) => item && typeof item === 'object')
+    .map((item) => Object.fromEntries(fields.map((field) => [field, String((item as any)[field] ?? '').trim().slice(0, 2000)])))
+    .filter((item) => Object.values(item).some(Boolean))
+    .slice(0, MAX_ITEMS)
+}
 
 // URL'si zorunlu ve gerçekten açılan tipler (contact'ta url alanı sadece başlıktır)
 const URL_REQUIRED_TYPES = new Set(['link', 'donation', 'embed-youtube', 'embed-twitter', 'embed-instagram', 'spotify'])
 // URL'si isteğe bağlı ama verilirse güvenli olması gereken tipler
-const URL_OPTIONAL_TYPES = new Set(['portfolio', 'countdown'])
+const URL_OPTIONAL_TYPES = new Set(['portfolio', 'countdown', 'coupon'])
 
 export function requiresSafeUrl(type: string | undefined): boolean {
   return URL_REQUIRED_TYPES.has(type || 'link')
@@ -91,6 +123,12 @@ export async function buildLinkData(
     const thumbnail = String(body.thumbnail || '').trim()
     if (thumbnail && !isImageUrl(thumbnail)) return { error: 'Geçersiz görsel adresi' }
     data.thumbnail = thumbnail
+  }
+
+  if (body.items !== undefined) {
+    const items = parseItems(type, body.items)
+    if (Array.isArray(body.items) && body.items.length > MAX_ITEMS) return { error: `En fazla ${MAX_ITEMS} satır eklenebilir` }
+    data.items = items.length ? JSON.stringify(items) : ''
   }
 
   if (body.images !== undefined) {

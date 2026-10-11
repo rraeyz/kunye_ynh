@@ -1,6 +1,6 @@
 // Ziyaretçi sayfasında blokların dizilişi.
 // Sıra her zaman admin panelindeki sıradır; sadece art arda gelen benzer bloklar
-// (linkler, metin/geri sayım, proje kartları) geniş ekranda yan yana bir ızgarada toplanır.
+// (linkler, metin/geri sayım/kupon, proje kartları) geniş ekranda yan yana bir ızgarada toplanır.
 // Öne çıkanlar, galeri, Spotify ve gömmeler her zaman tam genişlik kaplar.
 
 export type RunKind = 'links' | 'notes' | 'cards'
@@ -19,7 +19,7 @@ const LINK_LIKE = new Set(['link', 'donation', 'contact'])
 export function runKindOf(block: BlockLike): RunKind | null {
   if (block.featured) return null
   if (LINK_LIKE.has(block.type || 'link')) return 'links'
-  if (block.type === 'text' || block.type === 'countdown') return 'notes'
+  if (block.type === 'text' || block.type === 'countdown' || block.type === 'coupon') return 'notes'
   if (block.type === 'portfolio') return 'cards'
   return null
 }

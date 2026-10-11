@@ -3,7 +3,7 @@ import path from 'path'
 import sharp from 'sharp'
 import { prisma } from '@/lib/prisma'
 import { PROFILE_EDITABLE_FIELDS, PROFILE_SETTINGS_FIELDS, normalizeProfileCard, normalizeSettings } from '@/lib/profile'
-import { LINK_TYPES, isImageUrl, normalizeSlug, parseDate, parseImages } from '@/lib/links'
+import { LINK_TYPES, isImageUrl, normalizeSlug, parseDate, parseImages, parseItems } from '@/lib/links'
 import { isSafeUrl, isValidEmail } from '@/lib/security'
 import { FILE_NAME_PATTERN, UPLOAD_DIR } from '@/lib/uploads'
 import { BACKUP_FORMAT, BACKUP_FORMAT_VERSION, BackupKind, summarizeBackup } from '@/lib/backupFormat'
@@ -66,6 +66,8 @@ export async function createBackup(kind: BackupKind) {
       description: link.description,
       images: link.images,
       targetDate: link.targetDate,
+      items: link.items,
+      price: link.price,
       // Şifre (bcrypt hash) ve tıklama sayısı yalnızca tam yedekte
       ...(kind === 'full' ? { password: link.password, clicks: link.clicks, createdAt: link.createdAt } : { hasPassword: !!link.password }),
     }))
@@ -145,6 +147,8 @@ function linkFromBackup(raw: Record<string, any>, kind: BackupKind) {
     description: str(raw.description, 5000),
     images: images.length ? JSON.stringify(images) : '',
     targetDate: parseDate(raw.targetDate) ?? null,
+    items: (() => { const items = parseItems(String(raw.type), raw.items); return items.length ? JSON.stringify(items) : '' })(),
+    price: str(raw.price, 100),
     // Şifreler yalnızca tam yedekten gelir (geçerli bir bcrypt hash ise)
     password: kind === 'full' && isBcryptHash(raw.password) ? raw.password : '',
     clicks: kind === 'full' ? Math.max(0, int(raw.clicks)) : 0,
