@@ -8,7 +8,7 @@ import {
   FaGithub, FaTwitter, FaLinkedin, FaInstagram, FaYoutube, FaGlobe, FaEnvelope, FaDiscord, FaMedium, FaLink, FaDonate, FaPhone,
   FaMapMarkerAlt, FaCalendarAlt, FaFileAlt, FaMusic, FaVideo, FaGamepad, FaCamera, FaBook, FaHeart, FaShoppingCart, FaUser, FaUsers,
   FaCode, FaCogs, FaCloud, FaAlignLeft, FaBriefcase, FaHourglassHalf, FaImages, FaSpotify, FaExclamationTriangle,
-  FaHeading, FaTags, FaQuestionCircle, FaStream, FaQuoteLeft, FaTicketAlt, FaShoppingBag, FaMapMarkedAlt,
+  FaHeading, FaTags, FaQuestionCircle, FaStream, FaQuoteLeft, FaTicketAlt, FaShoppingBag, FaMapMarkedAlt, FaCopy,
 } from 'react-icons/fa'
 import { healthLabel, isBrokenStatus } from '@/lib/linkHealth'
 import { SiTelegram } from 'react-icons/si'
@@ -798,6 +798,18 @@ export default function LinksEditor({ initialLinks, autoAdd, onAutoAddHandled }:
     } else alert('Silinirken hata oluştu')
   }
 
+  // Kopya hemen altına eklenir ve düzenlemek için açılır
+  const handleDuplicate = async (id: number) => {
+    const response = await fetch(`/api/links/${id}/duplicate`, { method: 'POST' })
+    const data = await response.json().catch(() => ({}))
+    if (!response.ok) return setError(data.error || 'Kopyalanamadı')
+    await reload()
+    setForm(formFromLink(data))
+    setEditingId(data.id)
+    setMode('edit')
+    setError('')
+  }
+
   const toggleEnabled = async (id: number, enabled: boolean) => {
     const response = await fetch(`/api/links/${id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ enabled: !enabled }) })
     if (response.ok) await reload()
@@ -831,9 +843,14 @@ export default function LinksEditor({ initialLinks, autoAdd, onAutoAddHandled }:
           Vazgeç
         </button>
         {formMode === 'edit' && editingId !== null && (
-          <button type="button" onClick={() => handleDelete(editingId)} className="inline-flex items-center gap-2 px-4 py-2.5 bg-red-500/10 hover:bg-red-500/20 text-red-300 rounded-lg transition-colors sm:ml-auto">
-            <FaTrash className="w-3.5 h-3.5" /> Sil
-          </button>
+          <>
+            <button type="button" onClick={() => handleDuplicate(editingId)} title="Kaydedilmiş hâlinin kopyası altına eklenir" className="inline-flex items-center gap-2 px-4 py-2.5 bg-white/5 hover:bg-white/10 text-gray-200 rounded-lg transition-colors sm:ml-auto">
+              <FaCopy className="w-3.5 h-3.5" /> Kopyala
+            </button>
+            <button type="button" onClick={() => handleDelete(editingId)} className="inline-flex items-center gap-2 px-4 py-2.5 bg-red-500/10 hover:bg-red-500/20 text-red-300 rounded-lg transition-colors">
+              <FaTrash className="w-3.5 h-3.5" /> Sil
+            </button>
+          </>
         )}
       </div>
     </>

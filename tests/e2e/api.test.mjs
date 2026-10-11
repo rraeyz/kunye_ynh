@@ -729,6 +729,27 @@ test('otomatik yanıt ve hoş geldin e-postası ayarları', async () => {
   await put({ contactEmail: '', contactAutoReply: '', welcomeEmailSubject: '', welcomeEmailBody: '' })
 })
 
+test('blok kopyalama', async () => {
+  const links = (await req('/api/links', { cookie: admin })).data
+  const source = links.find((l) => l.password) // şifreli blok: koruma kopyaya geçmeli
+  assert.ok(source)
+  await req(`/api/links/${source.id}`, { method: 'PUT', cookie: admin, body: { slug: 'kopya-test' } })
+  assert.equal((await req(`/api/links/${source.id}/duplicate`, { method: 'POST' })).status, 401)
+  assert.equal((await req('/api/links/999999/duplicate', { method: 'POST', cookie: admin })).status, 404)
+  const copy = await req(`/api/links/${source.id}/duplicate`, { method: 'POST', cookie: admin })
+  assert.equal(copy.status, 200, JSON.stringify(copy.data))
+  assert.equal(copy.data.title, `${source.title} (kopya)`)
+  assert.equal(copy.data.slug, '', 'kısa link kopyalanmamalı')
+  assert.equal(copy.data.clicks, 0)
+  assert.ok(copy.data.password, 'şifre koruması kopyalanmalı')
+  const after = (await req('/api/links', { cookie: admin })).data
+  const index = after.findIndex((l) => l.id === source.id)
+  assert.equal(after[index + 1].id, copy.data.id, 'kopya hemen altında olmalı')
+  assert.equal((await req('/api/admin/revisions', { cookie: admin })).data.undo.label, `"${source.title}" kopyalandı`)
+  await req(`/api/links/${copy.data.id}`, { method: 'DELETE', cookie: admin })
+  await req(`/api/links/${source.id}`, { method: 'PUT', cookie: admin, body: { slug: '' } })
+})
+
 test('giriş rate limit: sadece hatalı denemeler sayılır', async () => {
   for (let i = 0; i < 12; i++) {
     assert.equal((await req('/api/auth/login', { method: 'POST', headers: ip(40), body: { username: 'admin', password: PASSWORD } })).status, 200)

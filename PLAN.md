@@ -8,7 +8,7 @@ ve testten geçer; oturum yarıda kalırsa bir sonraki işaretsiz adımdan devam
 - [x] 1.2 Ürün kartı (fiyat), harita (OpenStreetMap, API anahtarı gerekmez)
 - [x] 1.3 "Bu hafta / şu an" duyuru kutusu, ziyaretçi sayacı, bakım modu
 - [x] 1.4 İletişim formuna otomatik yanıt, yeni aboneye hoş geldin e-postası
-- [ ] 1.5 Blok kopyalama
+- [x] 1.5 Blok kopyalama
 
 ## Aşama 2: orta
 - [ ] 2.1 Bağış bloğu (Shopier, Buy Me a Coffee, Ko-fi, Patreon...; birden fazlası birlikte)
