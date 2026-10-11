@@ -1,10 +1,16 @@
 'use client'
 
-import { useState, useEffect } from 'react'
-import { FaEnvelope, FaTrash, FaDownload, FaSearch, FaUserPlus, FaPaperPlane } from 'react-icons/fa'
+import { useState, useEffect, useRef } from 'react'
+import { FaEnvelope, FaTrash, FaDownload, FaSearch, FaUserPlus, FaPaperPlane, FaUpload, FaTag, FaTimes } from 'react-icons/fa'
 import RichTextEditor from './RichTextEditor'
 import { CSV_BOM, csvRow } from '@/lib/csv'
 import AutoEmailSettings from './AutoEmailSettings'
+import SelectMenu from './SelectMenu'
+
+const splitTags = (tags?: string) => (tags ? tags.split(',').map((t) => t.trim()).filter(Boolean) : [])
+// lib/newsletter.ts tagKey ile aynı kural (ı/i aynı sayılır)
+const tagKey = (tag: string) => tag.trim().toLocaleLowerCase('tr-TR').replace(/ı/g, 'i')
+const sameTag = (a: string, b: string) => tagKey(a) === tagKey(b)
 
 export default function SubscriberManagement() {
   const [subscribers, setSubscribers] = useState<any[]>([])
@@ -19,6 +25,13 @@ export default function SubscriberManagement() {
   const [doubleOptIn, setDoubleOptIn] = useState(false)
   const [smtpReady, setSmtpReady] = useState(true)
   const [optInMessage, setOptInMessage] = useState('')
+  const [tagFilter, setTagFilter] = useState('')
+  // CSV içe aktarma: dosya seçilince önce özet + etiket alanı gösterilir, onaylanınca gönderilir
+  const [importFile, setImportFile] = useState<{ name: string; text: string } | null>(null)
+  const [importTags, setImportTags] = useState('')
+  const [importing, setImporting] = useState(false)
+  const [notice, setNotice] = useState<{ ok: boolean; text: string } | null>(null)
+  const fileInput = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     fetchSubscribers()
@@ -77,12 +90,13 @@ export default function SubscriberManagement() {
 
   const handleExportCSV = () => {
     const csv = CSV_BOM + [
-      csvRow(['Email', 'İsim', 'Kayıt Tarihi', 'Durum']),
+      csvRow(['Email', 'İsim', 'Kayıt Tarihi', 'Durum', 'Etiketler']),
       ...subscribers.map(s => csvRow([
         s.email,
         s.name || '-',
         new Date(s.createdAt).toLocaleDateString('tr-TR'),
-        s.confirmed === false ? 'Onay bekliyor' : 'Onaylı'
+        s.confirmed === false ? 'Onay bekliyor' : 'Onaylı',
+        s.tags || ''
       ]))
     ].join('\n')
 
@@ -91,6 +105,61 @@ export default function SubscriberManagement() {
     link.href = URL.createObjectURL(blob)
     link.download = `subscribers_${new Date().toISOString().split('T')[0]}.csv`
     link.click()
+  }
+
+  const chooseImportFile = async (file?: File) => {
+    if (fileInput.current) fileInput.current.value = ''
+    if (!file) return
+    if (file.size > 2_000_000) {
+      setNotice({ ok: false, text: 'Dosya çok büyük (en fazla 2 MB)' })
+      return
+    }
+    setNotice(null)
+    setImportTags('')
+    setImportFile({ name: file.name, text: await file.text() })
+  }
+
+  const handleImport = async () => {
+    if (!importFile) return
+    setImporting(true)
+    try {
+      const response = await fetch('/api/subscribers/import', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ csv: importFile.text, tags: importTags }),
+      })
+      const data = await response.json().catch(() => ({}))
+      if (!response.ok) {
+        setNotice({ ok: false, text: data.error || 'İçe aktarılamadı' })
+        return
+      }
+      setImportFile(null)
+      setNotice({ ok: true, text: `${data.added} yeni abone eklendi${data.updated ? `, ${data.updated} abone güncellendi` : ''}${data.skipped ? `, e-postası olmayan ${data.skipped} satır atlandı` : ''}` })
+      fetchSubscribers()
+    } catch {
+      setNotice({ ok: false, text: 'İçe aktarılamadı' })
+    } finally {
+      setImporting(false)
+    }
+  }
+
+  // Etiket ekle (seçilenlere) / kaldır (tek abonenin etiket rozetindeki ×)
+  const updateTags = async (ids: number[], change: { addTag?: string; removeTag?: string }) => {
+    const response = await fetch('/api/subscribers', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ids, ...change }),
+    }).catch(() => null)
+    if (!response?.ok) {
+      setNotice({ ok: false, text: 'Etiket kaydedilemedi' })
+      return
+    }
+    fetchSubscribers()
+  }
+
+  const addTagToSelected = () => {
+    const tag = prompt(`Seçili ${selectedIds.length} aboneye eklenecek etiket:`)?.trim()
+    if (tag) updateTags(selectedIds, { addTag: tag })
   }
 
   const handleSendBulkEmail = async () => {
@@ -143,9 +212,15 @@ export default function SubscriberManagement() {
     }
   }
 
+  const allTags = Array.from(new Map(subscribers.flatMap((s) => splitTags(s.tags)).map((t) => [tagKey(t), t] as const)).values())
+    .sort((a, b) => a.localeCompare(b, 'tr'))
+
   const filteredSubscribers = subscribers.filter(s =>
-    s.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    (s.name && s.name.toLowerCase().includes(searchTerm.toLowerCase()))
+    (!tagFilter || splitTags(s.tags).some((t) => sameTag(t, tagFilter))) && (
+      s.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (s.name && s.name.toLowerCase().includes(searchTerm.toLowerCase())) ||
+      splitTags(s.tags).some((t) => tagKey(t).includes(tagKey(searchTerm)))
+    )
   )
 
   if (loading) {
@@ -185,6 +260,24 @@ export default function SubscriberManagement() {
           </button>
           
           <button
+            onClick={addTagToSelected}
+            disabled={selectedIds.length === 0}
+            className="flex items-center gap-2 px-4 py-2 bg-blue-500/10 hover:bg-blue-500/20 text-blue-400 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            <FaTag className="w-4 h-4" />
+            <span>Etiket ekle</span>
+          </button>
+
+          <button
+            onClick={() => fileInput.current?.click()}
+            className="flex items-center gap-2 px-4 py-2 bg-gray-500/10 hover:bg-gray-500/20 text-gray-300 rounded-lg transition-colors"
+          >
+            <FaUpload className="w-4 h-4" />
+            <span>CSV Yükle</span>
+          </button>
+          <input ref={fileInput} type="file" accept=".csv,.txt,text/csv,text/plain" className="hidden" aria-label="CSV dosyası" onChange={(e) => chooseImportFile(e.target.files?.[0])} />
+
+          <button
             onClick={handleExportCSV}
             disabled={subscribers.length === 0}
             className="flex items-center gap-2 px-4 py-2 bg-green-500/10 hover:bg-green-500/20 text-green-400 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
@@ -194,6 +287,41 @@ export default function SubscriberManagement() {
           </button>
         </div>
       </div>
+
+      {notice && (
+        <div role="status" className={`mb-6 px-4 py-3 rounded-xl text-sm ${notice.ok ? 'bg-green-500/10 border border-green-500/50 text-green-400' : 'bg-red-500/10 border border-red-500/50 text-red-400'}`}>
+          {notice.text}
+        </div>
+      )}
+
+      {importFile && (
+        <div className="mb-6 p-4 bg-dark-bg rounded-xl border border-purple-500/50 space-y-3">
+          <div className="text-sm text-white font-medium break-all">İçe aktar: {importFile.name}</div>
+          <p className="text-sm text-gray-400">
+            E-posta sütunu otomatik bulunur; başlık satırında &quot;İsim&quot; ve &quot;Etiketler&quot; varsa onlar da alınır. Zaten kayıtlı adresler
+            tekrar eklenmez, etiketleri birleştirilir. İçe aktarılanlar onaylı sayılır: yalnızca bülten almayı kabul etmiş kişileri ekle.
+          </p>
+          <label className="block">
+            <span className="block text-sm text-gray-300 mb-1">Hepsine etiket ekle (isteğe bağlı)</span>
+            <input
+              type="text"
+              value={importTags}
+              onChange={(e) => setImportTags(e.target.value)}
+              maxLength={200}
+              placeholder="ör. müşteri, etkinlik-2026"
+              className="w-full px-4 py-2.5 bg-dark-card border border-gray-700 rounded-xl text-white focus:outline-none focus:border-purple-500"
+            />
+          </label>
+          <div className="flex gap-2">
+            <button type="button" onClick={handleImport} disabled={importing} className="px-4 py-2 bg-purple-600 hover:bg-purple-500 text-white rounded-lg text-sm font-medium disabled:opacity-50">
+              {importing ? 'Aktarılıyor...' : 'İçe aktar'}
+            </button>
+            <button type="button" onClick={() => setImportFile(null)} disabled={importing} className="px-4 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded-lg text-sm disabled:opacity-50">
+              Vazgeç
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* E-posta onayı ayarı */}
       <div className="mb-6 flex items-start gap-4 p-4 bg-dark-bg rounded-xl border border-gray-700">
@@ -232,8 +360,8 @@ export default function SubscriberManagement() {
       </div>
 
       {/* Search */}
-      <div className="mb-6">
-        <div className="relative">
+      <div className="mb-6 flex flex-wrap gap-3">
+        <div className="relative flex-1 min-w-[14rem]">
           <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
             <FaSearch className="text-gray-500" />
           </div>
@@ -242,9 +370,18 @@ export default function SubscriberManagement() {
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             className="w-full pl-10 pr-4 py-3 bg-dark-bg border border-gray-700 rounded-xl text-white focus:outline-none focus:border-purple-500 transition-colors"
-            placeholder="Email veya isim ara..."
+            placeholder="Email, isim veya etiket ara..."
           />
         </div>
+        {allTags.length > 0 && (
+          <SelectMenu
+            ariaLabel="Etikete göre süz"
+            value={tagFilter}
+            onChange={(value) => { setTagFilter(value); setSelectedIds([]) }}
+            options={[{ value: '', label: 'Tüm etiketler' }, ...allTags.map((t) => ({ value: t, label: t }))]}
+            className="px-4 py-3 bg-dark-bg border border-gray-700 rounded-xl text-white w-[12rem] max-w-full"
+          />
+        )}
       </div>
 
       {/* Stats */}
@@ -298,6 +435,7 @@ export default function SubscriberManagement() {
                 </th>
                 <th className="text-left py-3 px-4 text-sm font-semibold text-gray-400">Email</th>
                 <th className="text-left py-3 px-4 text-sm font-semibold text-gray-400">İsim</th>
+                <th className="text-left py-3 px-4 text-sm font-semibold text-gray-400">Etiketler</th>
                 <th className="text-left py-3 px-4 text-sm font-semibold text-gray-400">Kayıt Tarihi</th>
                 <th className="text-right py-3 px-4 text-sm font-semibold text-gray-400">İşlemler</th>
               </tr>
@@ -320,6 +458,18 @@ export default function SubscriberManagement() {
                     )}
                   </td>
                   <td className="py-3 px-4 text-gray-400">{subscriber.name || '-'}</td>
+                  <td className="py-3 px-4">
+                    <div className="flex flex-wrap gap-1">
+                      {splitTags(subscriber.tags).map((tag) => (
+                        <span key={tag} className="inline-flex items-center gap-1 pl-2 pr-1 py-0.5 rounded-full bg-blue-500/15 text-blue-300 text-xs whitespace-nowrap">
+                          {tag}
+                          <button type="button" aria-label={`${tag} etiketini kaldır`} onClick={() => updateTags([subscriber.id], { removeTag: tag })} className="p-0.5 rounded-full hover:bg-blue-500/30">
+                            <FaTimes className="w-2.5 h-2.5" />
+                          </button>
+                        </span>
+                      ))}
+                    </div>
+                  </td>
                   <td className="py-3 px-4 text-gray-400">
                     {new Date(subscriber.createdAt).toLocaleDateString('tr-TR', {
                       year: 'numeric',

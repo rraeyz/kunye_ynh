@@ -4,6 +4,9 @@ Sıra: önce kolay ve kısa işler, en sonda uzun ve hata çıkarmaya yatkın ol
 ve testten geçer; oturum yarıda kalırsa bir sonraki işaretsiz adımdan devam edilir. Aşama içinde sıra
 kullanıcının önceliğine göre değişebilir (ör. 2.7 öne alındı).
 
+Kullanıcı kararı (2026-10-11): site bu hâliyle yeterli; işaretsiz maddeler yalnızca kullanıcı ayrıca
+isterse yapılır, gereksiz risk alınmaz.
+
 ## Aşama 1: kolay ve kısa
 - [x] 1.1 Liste blokları: ayırıcı/bölüm başlığı, beceri rozetleri, kupon kodu (kopyala), referanslar, SSS, zaman çizelgesi
 - [x] 1.2 Ürün kartı (fiyat), harita (OpenStreetMap, API anahtarı gerekmez)
@@ -17,7 +20,7 @@ kullanıcının önceliğine göre değişebilir (ör. 2.7 öne alındı).
 - [ ] 2.3 Toplu düzenleme (çoklu seçim: gizle, sil, kategori)
 - [ ] 2.4 Linke tarihli hatırlatma notu
 - [ ] 2.5 Gerçek zamanlı ziyaretçi ("şu an X kişi")
-- [ ] 2.6 Planlanmış bülten gönderimi
+- [x] 2.6 Planlanmış bülten gönderimi (etikete göre, "Şimdi gönder", iptal) + hazır e-posta şablonları
 - [x] 2.7 Mesajlara panelden yanıt + konuşma geçmişi
 - [ ] 2.8 Kısa link yönetimi (/go linkleri, QR, tıklama)
 - [ ] 2.9 Aylık rapor (yazdırılabilir sayfa → PDF)
@@ -25,7 +28,7 @@ kullanıcının önceliğine göre değişebilir (ör. 2.7 öne alındı).
 ## Aşama 3: büyük veya riskli
 - [ ] 3.1 Anket bloğu
 - [ ] 3.2 Ziyaretçi defteri (onaylı yorumlar, spam koruması)
-- [ ] 3.3 Abone CSV içe aktarma ve etiketler
+- [x] 3.3 Abone CSV içe aktarma ve etiketler
 - [ ] 3.4 İndirilebilir dosya bloğu (CV, PDF) + indirme sayısı
 - [ ] 3.5 GitHub depoları bloğu
 - [ ] 3.6 Hazır sayfa şablonları
