@@ -84,6 +84,19 @@ model Profile {
   instagramUrl    String @default("")
   githubUrl       String @default("")
   showSocialIcons Boolean @default(true) // Sosyal medya linklerini ana sayfada ikon olarak göster
+
+  // Bülten: açıksa yeni abone, e-postasındaki onay linkine tıklayana kadar "onay bekliyor" kalır
+  newsletterDoubleOptIn Boolean @default(false)
+
+  // Otomatik işler (günde bir kez çalışır)
+  autoBackupEnabled   Boolean @default(false) // Tam yedeği sunucuya kaydet (son 7 gün)
+  weeklyReportEnabled Boolean @default(false) // Pazartesi haftalık özet e-postası
+  linkHealthEnabled   Boolean @default(true)  // Link adreslerini kontrol et, kırıkları panelde göster
+
+  // Bildirimler (yeni abone / iletişim mesajı). Boşsa gönderilmez
+  notifyNtfyUrl        String @default("") // https://ntfy.sh/konu
+  notifyTelegramToken  String @default("") // Bot token (istemciye gönderilmez)
+  notifyTelegramChatId String @default("")
   
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -123,6 +136,10 @@ model Link {
   description String   @default("")    // Metin bloğu içeriği, portfolyo/geri sayım açıklaması
   images      String   @default("")    // Galeri: JSON dizi olarak görsel adresleri
   targetDate  DateTime?                // Geri sayım hedef tarihi
+
+  // Link sağlık kontrolü: 0 = kontrol edilmedi, HTTP durum kodu, -1 = ulaşılamadı
+  healthStatus    Int       @default(0)
+  healthCheckedAt DateTime?
   
   // Advanced Analytics
   analytics Analytics[]
@@ -174,6 +191,7 @@ model Subscriber {
   id        Int      @id @default(autoincrement())
   email     String   @unique
   name      String   @default("")
+  confirmed Boolean  @default(true) // E-posta onayı açıkken yeni aboneler onaylayana kadar false
   createdAt DateTime @default(now())
 }
 
@@ -183,6 +201,9 @@ model Admin {
   passwordHash String
   // Şifre değişince / "tüm cihazlardan çıkış" yapılınca artar; eski oturum token'ları geçersiz olur
   sessionVersion Int    @default(0)
+  // İki adımlı doğrulama (TOTP). Boşsa kapalı
+  totpSecret   String   @default("")
+  totpRecovery String   @default("") // Tek kullanımlık kurtarma kodlarının SHA-256 özetleri (JSON dizi)
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 }
@@ -202,4 +223,58 @@ model PageView {
   ipHash      String   @default("")
 
   @@index([timestamp])
+}
+
+// Uygulamanın kendi iç durumu: kalıcı gizli anahtar, otomatik işlerin son çalışma zamanı vb.
+// Yedeğe girmez.
+model AppState {
+  key       String   @id
+  value     String
+  updatedAt DateTime @updatedAt
+}
+
+// Admin giriş denemeleri (Ayarlar → Güvenlik). 90 günden eskiler silinir
+model LoginEvent {
+  id        Int      @id @default(autoincrement())
+  timestamp DateTime @default(now())
+  success   Boolean
+  reason    String   @default("") // ok | password | totp | rate-limit
+  ip        String   @default("")
+  userAgent String   @default("")
+
+  @@index([timestamp])
+}
+
+// "Bana yaz" formundan gelen mesajlar (e-posta gönderilemese de kaybolmaz)
+model ContactMessage {
+  id        Int      @id @default(autoincrement())
+  createdAt DateTime @default(now())
+  name      String
+  email     String
+  message   String
+  read      Boolean  @default(false)
+  emailed   Boolean  @default(false) // Admin'e e-posta olarak da gitti mi
+
+  @@index([createdAt])
+}
+
+// Abonelere gönderilen bültenlerin geçmişi
+model NewsletterSend {
+  id         Int      @id @default(autoincrement())
+  createdAt  DateTime @default(now())
+  subject    String
+  recipients Int
+  sent       Int
+  failed     Int
+}
+
+// Geri al / ileri al: sayfa içeriğinin (profil, görünüm, bloklar) değişiklikten önceki hâli
+model Revision {
+  id        Int      @id @default(autoincrement())
+  createdAt DateTime @default(now())
+  kind      String   // undo | redo
+  label     String
+  data      String
+
+  @@index([kind])
 }

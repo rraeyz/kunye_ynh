@@ -38,18 +38,19 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Abone listesini al
+    // Abone listesini al (e-postasını onaylamamış olanlara bülten gitmez)
     let subscribers
-    if (subscriberIds && subscriberIds.length > 0) {
+    if (Array.isArray(subscriberIds) && subscriberIds.length > 0) {
       // Belirli aboneler seçildiyse
       subscribers = await prisma.subscriber.findMany({
         where: {
-          id: { in: subscriberIds }
+          id: { in: subscriberIds.map(Number).filter(Number.isInteger) },
+          confirmed: true,
         }
       })
     } else {
       // Tüm aboneler
-      subscribers = await prisma.subscriber.findMany()
+      subscribers = await prisma.subscriber.findMany({ where: { confirmed: true } })
     }
 
     if (subscribers.length === 0) {
@@ -113,6 +114,11 @@ export async function POST(request: NextRequest) {
         })
       )
     }
+
+    // Gönderim geçmişi (E-posta Gönder → Bülten geçmişi)
+    await prisma.newsletterSend.create({
+      data: { subject: String(subject).slice(0, 300), recipients: subscribers.length, sent: results.success, failed: results.failed },
+    }).catch((error) => console.warn('Bülten geçmişi yazılamadı:', error?.message))
 
     return NextResponse.json({
       message: `${results.success} e-posta başarıyla gönderildi`,

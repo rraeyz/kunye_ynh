@@ -44,8 +44,10 @@ export default function ProfileEditor({ initialProfile }: ProfileEditorProps) {
   })
   const [showSocialIcons, setShowSocialIcons] = useState<boolean>(initialProfile?.showSocialIcons ?? true)
   const [error, setError] = useState('')
-  // "Bana yaz" butonu ancak form gerçekten e-posta gönderebiliyorsa sitede görünür
-  const contactReady = !!(contactEmail && initialProfile?.smtpHost && initialProfile?.smtpUser && initialProfile?.hasSmtpPassword)
+  // "Bana yaz" butonu iletişim e-postası girilince görünür; mesajlar panelde (Mesajlar) saklanır,
+  // SMTP ayarlıysa ayrıca e-postayla gelir
+  const contactReady = !!contactEmail
+  const contactMailReady = !!(initialProfile?.smtpHost && initialProfile?.smtpUser && initialProfile?.hasSmtpPassword)
   const [saving, setSaving] = useState(false)
   const [message, setMessage] = useState('')
   const router = useRouter()
@@ -255,7 +257,7 @@ export default function ProfileEditor({ initialProfile }: ProfileEditorProps) {
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               {([
-                [showContactButton, setShowContactButton, '"Bana yaz" butonu', contactReady ? 'Ziyaretçi iletişim formunu açar.' : 'İletişim e-postası ve Ayarlar → SMTP dolmadan sitede görünmez.'],
+                [showContactButton, setShowContactButton, '"Bana yaz" butonu', !contactReady ? 'İletişim e-postası girilmeden sitede görünmez.' : contactMailReady ? 'Ziyaretçi iletişim formunu açar. Mesajlar Mesajlar bölümüne ve e-postana gelir.' : 'Mesajlar Mesajlar bölümünde birikir. E-postana da gelmesi için Ayarlar → SMTP\'yi doldur.'],
                 [showShareButton, setShowShareButton, 'Paylaş butonu', 'Sayfa linkini paylaşır ya da kopyalar.'],
                 [showNewsletter, setShowNewsletter, 'Bülten kutusu', 'Ziyaretçiler e-postasıyla abone olur (Aboneler bölümüne düşer).'],
                 [showCategoryTabs, setShowCategoryTabs, 'Kategori sekmeleri', 'Bloklarda en az 2 farklı kategori varsa üstte Tümü / kategori sekmeleri çıkar.'],

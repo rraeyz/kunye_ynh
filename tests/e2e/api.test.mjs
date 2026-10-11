@@ -3,6 +3,7 @@
 // Ek bağımlılık yok (Node 20 yerleşik test aracı + fetch).
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
+import { createHmac } from 'node:crypto'
 
 const B = process.env.BASE_URL || 'http://localhost:3000'
 const PASSWORD = 'e2e-password-123'
@@ -217,8 +218,8 @@ test('ziyaretçi sayfası: profil kartı, dinamik bloklar ve sıra', async () =>
   let home = (await req('/', { json: false })).text
   assert.ok(home.includes('Tez yazıyor') && home.includes('İstanbul'), 'durum ve konum görünmeli')
   assert.ok(!home.includes('newsletter-email'), 'bülten kapalıyken kutu olmamalı')
-  // SMTP yarım (şifre/kullanıcı yok) olduğu için "Bana yaz" gizli kalmalı
-  assert.ok(!home.includes('Bana yaz'), 'SMTP eksikken Bana yaz görünmemeli')
+  // İletişim e-postası girilmediği için "Bana yaz" gizli kalmalı
+  assert.ok(!home.includes('Bana yaz'), 'iletişim e-postası yokken Bana yaz görünmemeli')
 
   assert.equal((await put({ statusText: '', location: '', showNewsletter: true })).status, 200)
   home = (await req('/', { json: false })).text
@@ -366,6 +367,245 @@ test('link önizleme: yetki ve SSRF koruması', async () => {
     const res = await req('/api/admin/link-preview', { method: 'POST', cookie: admin, body: { url } })
     assert.equal(res.status, 400, `${url} reddedilmeli`)
   }
+})
+
+// RFC 6238 TOTP (sunucudaki src/lib/totp.ts ile aynı hesap; test bağımsız olsun diye burada yeniden yazıldı)
+function totpCode(secret, counter) {
+  const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567'
+  let bits = 0, value = 0
+  const bytes = []
+  for (const char of secret) {
+    value = (value << 5) | alphabet.indexOf(char)
+    bits += 5
+    if (bits >= 8) { bytes.push((value >>> (bits - 8)) & 255); bits -= 8 }
+  }
+  const message = Buffer.alloc(8)
+  message.writeBigUInt64BE(BigInt(counter))
+  const hmac = createHmac('sha1', Buffer.from(bytes)).update(message).digest()
+  const offset = hmac[hmac.length - 1] & 0xf
+  return String((hmac.readUInt32BE(offset) & 0x7fffffff) % 1_000_000).padStart(6, '0')
+}
+const nowCounter = () => Math.floor(Date.now() / 30_000)
+
+test('iki adımlı doğrulama ve giriş geçmişi', async () => {
+  const sec = (body) => req('/api/admin/security', { method: 'POST', cookie: admin, body })
+  assert.equal((await req('/api/admin/security')).status, 401)
+  assert.equal((await req('/api/admin/security', { method: 'POST', body: { action: 'totp-start' } })).status, 401)
+
+  const start = await sec({ action: 'totp-start' })
+  assert.equal(start.status, 200)
+  assert.match(start.data.secret, /^[A-Z2-7]{32}$/)
+  assert.ok(start.data.otpauthUrl.startsWith('otpauth://totp/'))
+  assert.equal((await sec({ action: 'totp-enable', code: '000000' })).status, 400, 'yanlış kodla açılmamalı')
+  const counter = nowCounter()
+  const enable = await sec({ action: 'totp-enable', code: totpCode(start.data.secret, counter) })
+  assert.equal(enable.status, 200, JSON.stringify(enable.data))
+  assert.equal(enable.data.recoveryCodes.length, 8)
+
+  const login = (body, n) => req('/api/auth/login', { method: 'POST', headers: ip(n), body: { username: 'admin', password: PASSWORD, ...body } })
+  const noCode = await login({}, 70)
+  assert.equal(noCode.status, 200)
+  assert.equal(noCode.data.twoFactorRequired, true, 'şifreden sonra kod istenmeli')
+  assert.equal(noCode.cookie, undefined, 'kodsuz oturum açılmamalı')
+  assert.equal((await login({ code: '123456' }, 70)).status, 401)
+  assert.equal((await login({ code: totpCode(start.data.secret, counter) }, 70)).status, 401, 'kurulumda kullanılan kod tekrar kullanılamaz')
+  const ok = await login({ code: totpCode(start.data.secret, counter + 1) }, 71)
+  assert.equal(ok.status, 200, JSON.stringify(ok.data))
+  assert.ok(ok.cookie)
+
+  assert.equal((await req('/api/auth/login', { method: 'POST', headers: ip(74), body: { username: 'admin', password: 'yanlis-sifre' } })).status, 401)
+
+  const recovery = enable.data.recoveryCodes[0]
+  assert.equal((await login({ code: recovery.toUpperCase() }, 72)).status, 200, 'kurtarma kodu çalışmalı')
+  assert.equal((await login({ code: recovery }, 72)).status, 401, 'kurtarma kodu ikinci kez çalışmamalı')
+  assert.equal((await req('/api/admin/security', { cookie: admin })).data.twoFactor.recoveryLeft, 7)
+
+  const events = (await req('/api/admin/security', { cookie: admin })).data.events
+  assert.ok(events.some((e) => !e.success && e.reason === 'totp'), 'hatalı kod kaydedilmeli')
+  assert.ok(events.some((e) => e.success && e.reason === 'recovery'))
+  assert.ok(events.some((e) => !e.success && e.reason === 'password'), 'hatalı şifre kaydedilmeli')
+
+  assert.equal((await sec({ action: 'totp-disable', password: 'yanlis' })).status, 401, 'şifresiz kapatılamamalı')
+  assert.equal((await sec({ action: 'totp-disable', password: PASSWORD })).status, 200)
+  assert.equal((await login({}, 73)).data.success, true, 'kapatınca yalnızca şifre yeterli')
+})
+
+test('iletişim mesajları panelde saklanır', async () => {
+  const put = (body) => req('/api/profile', { method: 'PUT', cookie: admin, body })
+  const contact = (body) => req('/api/contact', { method: 'POST', headers: ip(80), body })
+  assert.equal((await put({ contactEmail: '' })).status, 200)
+  assert.equal((await contact({ name: 'Ziyaretçi', email: 'z@example.com', message: 'Merhaba' })).status, 400, 'iletişim e-postası yokken form kapalı')
+
+  assert.equal((await put({ contactEmail: 'ben@example.com' })).status, 200)
+  const home = (await req('/', { json: false })).text
+  assert.ok(home.includes('Bana yaz'), 'iletişim e-postası girilince Bana yaz görünmeli (SMTP olmadan da)')
+
+  const sent = await contact({ name: 'Ayşe <b>', email: 'ayse@example.com', message: 'Merhaba,\nnasılsın?' })
+  assert.equal(sent.status, 200, 'SMTP olmasa da mesaj kabul edilmeli')
+  assert.equal((await req('/api/admin/messages')).status, 401)
+  assert.equal((await req('/api/admin/messages?unread=1', { cookie: admin })).data.unread, 1)
+  const [message] = (await req('/api/admin/messages', { cookie: admin })).data
+  assert.equal(message.name, 'Ayşe <b>')
+  assert.equal(message.message, 'Merhaba,\nnasılsın?')
+  assert.equal(message.read, false)
+  assert.equal(message.emailed, false)
+
+  assert.equal((await req(`/api/admin/messages/${message.id}`, { method: 'PATCH', body: { read: true } })).status, 401)
+  assert.equal((await req(`/api/admin/messages/${message.id}`, { method: 'PATCH', cookie: admin, body: { read: true } })).status, 200)
+  assert.equal((await req('/api/admin/messages?unread=1', { cookie: admin })).data.unread, 0)
+  assert.equal((await req('/api/admin/overview', { cookie: admin })).data.status.unreadMessages, 0)
+
+  // Tam yedek mesajları içerir
+  const full = (await req('/api/admin/backup?kind=full', { cookie: admin })).data
+  assert.ok(full.contactMessages.some((m) => m.email === 'ayse@example.com'))
+
+  assert.equal((await req(`/api/admin/messages/${message.id}`, { method: 'DELETE', cookie: admin })).status, 200)
+  assert.equal((await req('/api/admin/messages', { cookie: admin })).data.length, 0)
+  await put({ contactEmail: '' })
+})
+
+test('bülten: e-posta onayı ayarı, aboneler ve onay linki', async () => {
+  const put = (body) => req('/api/profile', { method: 'PUT', cookie: admin, body })
+  const subscribe = (body) => req('/api/subscribe', { method: 'POST', headers: ip(90), body })
+  assert.equal((await put({ newsletterDoubleOptIn: true })).status, 200)
+  assert.equal((await req('/api/profile', { cookie: admin })).data.newsletterDoubleOptIn, true)
+
+  // SMTP tam ayarlı değil: onay e-postası gidemeyeceği için abone doğrudan eklenir
+  const first = await subscribe({ email: 'Onay@Example.com', name: 'İlk' })
+  assert.equal(first.status, 200)
+  assert.equal(first.data.pending, undefined)
+  // Onaylı abonenin adı başkası tarafından değiştirilemez
+  assert.equal((await subscribe({ email: 'onay@example.com', name: 'Kötü niyetli' })).status, 200)
+  const subscriber = (await req('/api/subscribers', { cookie: admin })).data.find((s) => s.email === 'onay@example.com')
+  assert.equal(subscriber.name, 'İlk')
+  assert.equal(subscriber.confirmed, true)
+
+  // Geçersiz onay linkleri
+  assert.equal((await req('/api/subscribe/confirm', { method: 'POST', body: { email: 'onay@example.com', token: 'x'.repeat(32) } })).status, 400)
+  const page = (await req('/subscribe/confirm?e=onay@example.com&t=yanlis', { json: false })).text
+  assert.ok(page.includes('geçersiz'))
+  // Abonelikten çıkma imzası onay yerine geçmez (ve tersi)
+  assert.equal((await req('/api/unsubscribe', { method: 'POST', body: { email: 'onay@example.com', token: 'x'.repeat(32) } })).status, 400)
+
+  assert.equal((await put({ newsletterDoubleOptIn: false })).status, 200)
+})
+
+test('geri al / ileri al', async () => {
+  const revisions = () => req('/api/admin/revisions', { cookie: admin })
+  const step = (direction) => req('/api/admin/revisions', { method: 'POST', cookie: admin, body: { direction } })
+  assert.equal((await req('/api/admin/revisions')).status, 401)
+  assert.equal((await step('bogus')).status, 400)
+
+  const created = await req('/api/links', { method: 'POST', cookie: admin, body: { title: 'Geri alınacak', url: 'https://example.com/geri' } })
+  assert.equal(created.status, 200)
+  assert.equal((await revisions()).data.undo.label, '"Geri alınacak" eklendi')
+  assert.equal((await revisions()).data.redo, null)
+
+  const undo = await step('undo')
+  assert.equal(undo.status, 200, JSON.stringify(undo.data))
+  assert.equal(undo.data.label, '"Geri alınacak" eklendi')
+  let links = (await req('/api/links', { cookie: admin })).data
+  assert.ok(!links.some((l) => l.id === created.data.id), 'geri alınca blok silinmeli')
+  assert.ok(!(await req('/', { json: false })).text.includes('Geri alınacak'), 'site önbelleği tazelenmeli')
+
+  assert.equal((await step('redo')).status, 200)
+  links = (await req('/api/links', { cookie: admin })).data
+  assert.ok(links.some((l) => l.id === created.data.id && l.url === 'https://example.com/geri'), 'ileri alınca aynı kimlikle geri gelmeli')
+  assert.equal((await step('redo')).status, 409, 'ileri alınacak adım kalmamalı')
+
+  // Profil değişikliği geri alınır; ayarlar (SMTP vb.) geri al listesine girmez
+  const before = (await req('/api/profile', { cookie: admin })).data.name
+  await req('/api/profile', { method: 'PUT', cookie: admin, body: { name: 'Geçici isim' } })
+  await req('/api/profile', { method: 'PUT', cookie: admin, body: { smtpPort: 2525 } })
+  assert.equal((await revisions()).data.undo.label, 'Profil')
+  assert.equal((await step('undo')).status, 200)
+  const profile = (await req('/api/profile', { cookie: admin })).data
+  assert.equal(profile.name, before)
+  assert.equal(profile.smtpPort, 2525, 'geri al ayarlara dokunmamalı')
+
+  await req(`/api/links/${created.data.id}`, { method: 'DELETE', cookie: admin })
+})
+
+test('analitik: dönem karşılaştırma, ısı haritası, link detayı', async () => {
+  const links = (await req('/api/links', { cookie: admin })).data
+  const target = links.find((l) => l.type === 'link' && l.enabled && !l.password)
+  const ua = { 'user-agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36' }
+  assert.equal((await req(`/api/links/${target.id}/click`, { method: 'POST', headers: { ...ua, ...ip(100) }, body: { referrer: 'https://www.instagram.com/x' } })).data.recorded, true)
+  // Olmayan / geçersiz link tıklaması hata vermez, kaydedilmez
+  for (const id of ['999999', 'abc']) {
+    const res = await req(`/api/links/${id}/click`, { method: 'POST', headers: { ...ua, ...ip(100) }, body: {} })
+    assert.equal(res.status, 200, `${id}: ${JSON.stringify(res.data)}`)
+    assert.equal(res.data.recorded, false)
+  }
+  await req('/api/views', { method: 'POST', headers: { ...ua, ...ip(101) }, body: {} })
+
+  const all = (await req('/api/analytics?range=7d', { cookie: admin })).data
+  assert.equal(all.heatmap.length, 7)
+  assert.ok(all.heatmap.every((row) => row.length === 24))
+  assert.ok(all.heatmap.flat().reduce((a, b) => a + b, 0) === all.views, 'ısı haritası görüntülenme sayısıyla tutmalı')
+  assert.deepEqual(Object.keys(all.previous).sort(), ['clicks', 'uniqueVisitors', 'views'])
+  assert.equal(all.dailyClicks.length, 7)
+  assert.ok(all.referrers['instagram.com'] >= 1)
+
+  const one = (await req(`/api/analytics?range=7d&linkId=${target.id}`, { cookie: admin })).data
+  assert.ok(one.rangeClicks >= 1 && one.rangeClicks <= all.rangeClicks)
+  assert.equal(one.views, all.views, 'görüntülenmeler profil geneli kalır')
+  assert.equal((await req('/api/analytics?range=all', { cookie: admin })).data.previous, null)
+})
+
+test('otomatik işler, bildirim ayarları ve link kontrolü', async () => {
+  const job = (name) => req('/api/admin/jobs', { method: 'POST', cookie: admin, body: { job: name } })
+  const put = (body) => req('/api/profile', { method: 'PUT', cookie: admin, body })
+  assert.equal((await req('/api/admin/jobs')).status, 401)
+  assert.equal((await job('bogus')).status, 400)
+
+  const backup = await job('auto-backup')
+  assert.equal(backup.status, 200, JSON.stringify(backup.data))
+  const info = (await req('/api/admin/jobs', { cookie: admin })).data
+  assert.equal(info.autoBackups.length, 1)
+  assert.ok(info.lastRuns.autoBackup)
+  const file = await req(`/api/admin/backup?auto=${info.autoBackups[0].name}`, { cookie: admin })
+  assert.equal(file.status, 200)
+  assert.equal(file.data.format, 'kunye-backup')
+  assert.equal(file.data.kind, 'full')
+  assert.equal((await req(`/api/admin/backup?auto=${info.autoBackups[0].name}`)).status, 401)
+  assert.equal((await req('/api/admin/backup?auto=..%2F.env', { cookie: admin })).status, 404)
+  assert.ok((await req('/api/admin/overview', { cookie: admin })).data.status.lastBackup, 'son yedek Genel Bakış\'ta görünmeli')
+
+  assert.equal((await job('link-health')).status, 200)
+  assert.equal((await job('test-notification')).status, 400, 'bildirim ayarı yokken test reddedilmeli')
+  const report = await job('weekly-report')
+  assert.equal(report.status, 500)
+  assert.match(report.data.error, /SMTP/)
+
+  assert.equal((await put({ notifyNtfyUrl: 'javascript:alert(1)' })).status, 400)
+  assert.equal((await put({ notifyTelegramToken: 'kotu' })).status, 400)
+  assert.equal((await put({ notifyTelegramChatId: 'abc def' })).status, 400)
+  const saved = await put({ notifyTelegramToken: '123456:ABCDEFGHIJKLMNOPQRSTUVWXYZ_abc', notifyTelegramChatId: '12345', autoBackupEnabled: true })
+  assert.equal(saved.status, 200)
+  assert.equal(saved.data.notifyTelegramToken, '', 'bot anahtarı istemciye gönderilmemeli')
+  assert.equal(saved.data.hasTelegramToken, true)
+  assert.equal(saved.data.autoBackupEnabled, true)
+  assert.ok(!JSON.stringify((await req('/api/admin/backup?kind=profile', { cookie: admin })).data).includes('ABCDEFGHIJKLMNOP'), 'profil yedeği bildirim ayarı içermemeli')
+  await put({ notifyTelegramChatId: '', autoBackupEnabled: false })
+})
+
+test('paylaşım görseli, yapısal veri ve içerik güvenlik politikası', async () => {
+  const og = await fetch(B + '/api/og')
+  assert.equal(og.status, 200)
+  assert.equal(og.headers.get('content-type'), 'image/png')
+  assert.ok((await og.arrayBuffer()).byteLength > 10_000)
+
+  const res = await fetch(B + '/')
+  const html = await res.text()
+  const ld = JSON.parse(html.match(/<script type="application\/ld\+json">(.*?)<\/script>/)[1])
+  assert.equal(ld['@type'], 'ProfilePage')
+  assert.equal(ld.mainEntity['@type'], 'Person')
+  assert.ok(ld.mainEntity.name)
+  assert.ok(html.includes('/api/og?v='), 'kendi görseli yoksa üretilen kart kullanılmalı')
+
+  const csp = res.headers.get('content-security-policy') || ''
+  assert.ok(csp.includes("object-src 'none'") && csp.includes("frame-ancestors 'self'"))
 })
 
 test('giriş rate limit: sadece hatalı denemeler sayılır', async () => {

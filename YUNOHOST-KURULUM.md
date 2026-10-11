@@ -131,6 +131,11 @@ cd /opt/yunohost/kunye && sudo docker-compose restart
   ```
   Ardından `https://<domain>/setup` açın. Linkler, analitik ve aboneler korunur. Sihirbazın profil adımında boş bıraktığınız alanlar değişmez.
   Çok eski bir kurulumdan geliyorsanız ve `/home/yunohost.app/kunye/.env` içinde `ADMIN_PASSWORD=` satırı varsa, onu da silip `sudo docker restart kunye` çalıştırın.
+  Bu işlem iki adımlı doğrulamayı da kapatır.
+- **İki adımlı doğrulamada telefonumu kaybettim:** Girişte kod yerine kurtarma kodlarından birini yazın. Kurtarma kodlarınız da yoksa yalnızca iki adımlı doğrulamayı kapatın (şifreniz değişmez):
+  ```bash
+  sudo docker exec kunye node -e "new (require('better-sqlite3'))('/app/prisma/dev.db').exec(\"UPDATE Admin SET totpSecret='', totpRecovery=''\")"
+  ```
 - **Kurulumdan sonra sayfa açılmıyor:** İmaj derlemesi uzun sürmüş olabilir. `docker logs` çıktısında `Ready` satırını bekleyin.
 - **E-posta gitmiyor:** Gmail için normal şifre değil "uygulama şifresi" gerekir (port 587, Secure kapalı).
 

@@ -1,6 +1,6 @@
 'use client'
 
-import { motion } from 'framer-motion'
+import { m as motion } from 'framer-motion' // hafif mod: bkz. MotionProvider
 import { useState, useEffect } from 'react'
 import { FaYoutube, FaTwitter, FaInstagram, FaSpinner } from 'react-icons/fa'
 

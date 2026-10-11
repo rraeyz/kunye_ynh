@@ -3,6 +3,8 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import BackupPanel from './BackupPanel'
+import SecurityPanel from './SecurityPanel'
+import AutomationPanel from './AutomationPanel'
 import SelectMenu from './SelectMenu'
 import { FaKey, FaSave, FaTrash, FaChartLine, FaEnvelope } from 'react-icons/fa'
 
@@ -314,7 +316,11 @@ export default function SettingsPanel() {
         </div>
       </div>
 
+      <SecurityPanel />
+
       <BackupPanel />
+
+      <AutomationPanel />
 
       {/* Analytics Settings */}
       <div className="bg-dark-card border border-gray-800 rounded-2xl p-8">
@@ -376,7 +382,7 @@ export default function SettingsPanel() {
 
           <div className="bg-blue-500/10 border border-blue-500/30 rounded-xl p-4">
             <p className="text-sm text-blue-400">
-              💡 <strong>İpucu:</strong> Otomatik temizlik her analytics sayfası açıldığında çalışır. 
+              💡 <strong>İpucu:</strong> Süresi geçen veriler her gün kendiliğinden ve analitik sayfası her açıldığında silinir. 
               Manuel temizlik ile tüm geçmişi anında silebilirsiniz.
             </p>
           </div>

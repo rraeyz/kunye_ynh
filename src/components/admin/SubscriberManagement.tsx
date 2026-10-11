@@ -14,10 +14,37 @@ export default function SubscriberManagement() {
   const [emailSubject, setEmailSubject] = useState('')
   const [emailMessage, setEmailMessage] = useState('')
   const [sending, setSending] = useState(false)
+  // E-posta onayı (double opt-in): açıksa yeni aboneler e-postadaki linke tıklayana kadar "onay bekliyor" kalır
+  const [doubleOptIn, setDoubleOptIn] = useState(false)
+  const [smtpReady, setSmtpReady] = useState(true)
+  const [optInMessage, setOptInMessage] = useState('')
 
   useEffect(() => {
     fetchSubscribers()
+    fetch('/api/profile').then((r) => (r.ok ? r.json() : null)).then((profile) => {
+      if (!profile) return
+      setDoubleOptIn(!!profile.newsletterDoubleOptIn)
+      setSmtpReady(!!(profile.smtpHost && profile.smtpUser && profile.hasSmtpPassword))
+    }).catch(() => {})
   }, [])
+
+  const toggleDoubleOptIn = async () => {
+    const value = !doubleOptIn
+    setDoubleOptIn(value)
+    setOptInMessage('')
+    const response = await fetch('/api/profile', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ newsletterDoubleOptIn: value }),
+    }).catch(() => null)
+    if (!response?.ok) {
+      setDoubleOptIn(!value)
+      setOptInMessage('Kaydedilemedi')
+    }
+  }
+
+  const confirmedCount = subscribers.filter((s) => s.confirmed !== false).length
+  const pendingCount = subscribers.length - confirmedCount
 
   const fetchSubscribers = async () => {
     try {
@@ -49,11 +76,12 @@ export default function SubscriberManagement() {
 
   const handleExportCSV = () => {
     const csv = CSV_BOM + [
-      csvRow(['Email', 'İsim', 'Kayıt Tarihi']),
+      csvRow(['Email', 'İsim', 'Kayıt Tarihi', 'Durum']),
       ...subscribers.map(s => csvRow([
         s.email,
         s.name || '-',
-        new Date(s.createdAt).toLocaleDateString('tr-TR')
+        new Date(s.createdAt).toLocaleDateString('tr-TR'),
+        s.confirmed === false ? 'Onay bekliyor' : 'Onaylı'
       ]))
     ].join('\n')
 
@@ -139,7 +167,8 @@ export default function SubscriberManagement() {
             Abone Yönetimi
           </h2>
           <p className="text-gray-400 mt-1">
-            Toplam {subscribers.length} abone
+            Toplam {confirmedCount} abone
+            {pendingCount > 0 && ` • ${pendingCount} onay bekliyor`}
             {selectedIds.length > 0 && ` • ${selectedIds.length} seçili`}
           </p>
         </div>
@@ -165,6 +194,31 @@ export default function SubscriberManagement() {
         </div>
       </div>
 
+      {/* E-posta onayı ayarı */}
+      <div className="mb-6 flex items-start gap-4 p-4 bg-dark-bg rounded-xl border border-gray-700">
+        <button
+          type="button"
+          role="switch"
+          aria-checked={doubleOptIn}
+          aria-label="E-posta onayı"
+          onClick={toggleDoubleOptIn}
+          className={`relative w-11 h-6 rounded-full shrink-0 transition-colors ${doubleOptIn ? 'bg-purple-500' : 'bg-gray-700'}`}
+        >
+          <span className={`absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white transition-transform ${doubleOptIn ? 'translate-x-5' : ''}`} />
+        </button>
+        <div className="min-w-0">
+          <div className="text-sm font-medium text-white">E-posta onayı (çift onay)</div>
+          <p className="text-sm text-gray-400 mt-0.5">
+            Açıkken yeni abone, e-postasına gelen linke tıklayana kadar listeye girmez ve bülten almaz. Başkasının adresiyle yapılan kayıtları önler.
+            Onaylanmayan kayıtlar 7 gün sonra silinir.
+          </p>
+          {doubleOptIn && !smtpReady && (
+            <p className="text-sm text-amber-400 mt-1">SMTP ayarlı olmadığı için onay e-postası gidemez; aboneler şimdilik onaysız eklenir. Ayarlar → SMTP&apos;yi doldur.</p>
+          )}
+          {optInMessage && <p className="text-sm text-red-400 mt-1">{optInMessage}</p>}
+        </div>
+      </div>
+
       {/* Search */}
       <div className="mb-6">
         <div className="relative">
@@ -185,7 +239,7 @@ export default function SubscriberManagement() {
       <div className="grid grid-cols-3 gap-4 mb-6">
         <div className="p-4 bg-dark-bg rounded-xl border border-gray-700">
           <p className="text-sm text-gray-400 mb-1">Toplam Abone</p>
-          <p className="text-2xl font-bold text-white">{subscribers.length}</p>
+          <p className="text-2xl font-bold text-white">{confirmedCount}</p>
         </div>
         <div className="p-4 bg-dark-bg rounded-xl border border-gray-700">
           <p className="text-sm text-gray-400 mb-1">Bu Hafta</p>
@@ -247,7 +301,12 @@ export default function SubscriberManagement() {
                       className="w-4 h-4 rounded border-gray-600 bg-dark-bg text-purple-500 focus:ring-purple-500"
                     />
                   </td>
-                  <td className="py-3 px-4 text-white">{subscriber.email}</td>
+                  <td className="py-3 px-4 text-white">
+                    {subscriber.email}
+                    {subscriber.confirmed === false && (
+                      <span className="ml-2 px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-300 text-xs whitespace-nowrap">Onay bekliyor</span>
+                    )}
+                  </td>
                   <td className="py-3 px-4 text-gray-400">{subscriber.name || '-'}</td>
                   <td className="py-3 px-4 text-gray-400">
                     {new Date(subscriber.createdAt).toLocaleDateString('tr-TR', {
@@ -280,9 +339,10 @@ export default function SubscriberManagement() {
             </h3>
             <p className="text-gray-400 mb-6">
               {selectedIds.length > 0 
-                ? `${selectedIds.length} aboneye e-posta gönderilecek`
-                : `Tüm ${subscribers.length} aboneye e-posta gönderilecek`
+                ? `${subscribers.filter((s) => selectedIds.includes(s.id) && s.confirmed !== false).length} aboneye e-posta gönderilecek`
+                : `Tüm ${confirmedCount} aboneye e-posta gönderilecek`
               }
+              {pendingCount > 0 && ' (onay bekleyenlere gönderilmez)'}
             </p>
 
             <div className="space-y-4">

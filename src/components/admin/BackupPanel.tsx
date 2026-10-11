@@ -9,7 +9,7 @@ import SelectMenu from './SelectMenu'
 // anlaşılır ve yüklemeden önce ne içerdiği / neyin üzerine yazılacağı gösterilir.
 
 const RESTORE_WARNING: Record<BackupKind, string> = {
-  full: 'Profil, görünüm, SMTP ayarları, bloklar, aboneler ve analitik tamamen yedektekiyle değiştirilir.',
+  full: 'Profil, görünüm, SMTP ayarları, bloklar, aboneler, iletişim mesajları ve analitik tamamen yedektekiyle değiştirilir.',
   settings: 'Profil, görünüm, SMTP ayarları ve bloklar yedektekiyle değiştirilir; yedekte olmayan bloklar silinir. Aboneler ve analitik korunur.',
   profile: 'Yalnızca profil kartı, tema, kapak ve sosyal hesaplar değişir. Bloklara, SMTP ayarlarına ve abonelere dokunulmaz.',
 }

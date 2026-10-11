@@ -64,10 +64,13 @@ export async function recordClick(
     }
   }
 
-  const link = await prisma.link.update({
-    where: { id: linkId },
+  // Silinmiş/kapalı ya da geçersiz kimlikli link: kayıt yok (önceden 500 hatası dönüyordu)
+  if (!Number.isInteger(linkId)) return null
+  const updated = await prisma.link.updateMany({
+    where: { id: linkId, enabled: true },
     data: { clicks: { increment: 1 } },
   })
+  if (updated.count === 0) return null
 
   await prisma.analytics.create({
     data: {
@@ -89,7 +92,7 @@ export async function recordClick(
     },
   })
 
-  return link
+  return true
 }
 
 // Arama motoru botları, link önizleme servisleri vb. görüntülenme sayılmaz

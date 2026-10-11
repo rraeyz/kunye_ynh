@@ -1,3 +1,46 @@
+# 1.5.0
+
+### 🔐 Güvenlik
+- **İki adımlı doğrulama (2FA):** Ayarlar → Güvenlik'ten açılır. Girişte şifreden sonra telefondaki doğrulama uygulamasının (Google Authenticator, Aegis, 1Password...) kodu istenir. Kurulumda 8 tek kullanımlık kurtarma kodu verilir. Kapatmak ve yeni kod üretmek şifre ister. Telefon kaybolursa ne yapılacağı kurulum kılavuzlarında.
+- **Giriş geçmişi:** Ayarlar → Güvenlik'te son 30 giriş denemesi görünür (zaman, sonuç, IP, cihaz). Kayıtlar 90 gün sonra silinir.
+- **İçerik Güvenlik Politikası (CSP):** Sayfa yalnızca kendi kaynaklarını ve gömme bloklarının (YouTube, Spotify, X, Instagram) servislerini yükleyebilir.
+- **Kalıcı gizli anahtar:** `.env` dosyası yazılamasa bile (ör. Docker'da `touch .env` unutulursa) oturumlar, IP özetleri ve e-postalardaki "abonelikten çık" linkleri yeniden başlatmada bozulmaz; anahtar veritabanında da saklanır.
+
+### ✉️ Mesajlar ve bülten
+- **Mesajlar:** "Bana yaz" formundan gelen mesajlar admin panelinde yeni **Mesajlar** bölümünde birikir (okundu/okunmadı, yanıtla, sil; menüde okunmamış sayısı). SMTP ayarlı değilse de mesaj kaybolmaz; SMTP ayarlıysa ayrıca e-postayla gelir. Bu yüzden "Bana yaz" butonu artık iletişim e-postası girilince görünür (SMTP şartı kalktı).
+- **E-posta onayı (çift onay):** Aboneler bölümünden açılıp kapanır. Açıkken yeni abone, e-postasına gelen linke tıklayana kadar "onay bekliyor" kalır ve bülten almaz; 7 gün içinde onaylanmazsa silinir. Başkasının adresiyle kayıt yapılmasını önler.
+- Onaylı bir abonenin adı, aynı adresle yeniden kayıt olunarak değiştirilemez.
+- **Bülten geçmişi:** E-posta Gönder'de abonelere gönderilen son bültenler (tarih, kaç kişiye gittiği, hatalar).
+- **Anlık bildirim:** Yeni abone ve yeni mesajda ntfy ve/veya Telegram'a bildirim (Ayarlar → Anlık bildirimler, test butonuyla).
+
+### 📊 Analitik
+- Hesaplamalar veritabanında yapılıyor; kayıt sayısı arttıkça sayfa yavaşlamaz.
+- Önceki döneme göre değişim ("önceki 7 güne göre %12 artış"), dönemdeki tıklama kartı.
+- **Ziyaret ısı haritası:** haftanın günü × saat; en yoğun zaman yazılır.
+- **Link detayı:** üstteki seçiciden bir link seçince tıklama, cihaz, ülke ve kaynak verileri yalnızca o link için.
+- **Haftalık özet e-postası:** Pazartesileri son 7 günün özeti (Ayarlar → Otomatik işler; "Şimdi gönder" ile denenebilir).
+
+### 🤖 Otomatik işler (günde bir kez, Ayarlar → Otomatik işler)
+- **Otomatik yedek:** açılıp kapanır; tam yedeği sunucuya kaydeder, son 7 günü tutar, panelden indirilebilir.
+- **Link kontrolü:** açık linklerin adreslerini dener; açılmayanlar Linkler ve Genel Bakış'ta uyarıyla görünür. Sunucu internete çıkamıyorsa linkler yanlışlıkla işaretlenmez.
+- **Kullanılmayan görseller:** değiştirilen/silinen ve hiçbir yerde kullanılmayan yüklemeler 7 gün sonra silinir.
+- Süresi geçen analitik verisi artık analitik sayfası açılmasa da silinir.
+
+### ↩️ Geri al / İleri al
+- Üst çubukta: profil, görünüm, SEO ve bloklarda yapılan son 30 değişiklik adım adım geri alınır (yedekten geri yükleme dahil). Ayarlar (SMTP, bildirimler), aboneler ve analitik geri al kapsamında değil.
+
+### 🔎 Paylaşım ve arama motorları
+- **Paylaşım görseli:** Profil → SEO'da kendi görselin yoksa link paylaşılınca fotoğrafın, adın, biyografin ve tema renklerinden üretilen bir kart görünür.
+- **Yapısal veri (JSON-LD):** Google'a sayfanın kime ait olduğu ve hangi sosyal hesapların aynı kişiye ait olduğu bildirilir (Profil → isim, biyografi, fotoğraf, konum, sosyal medya hesapları).
+
+### ⚡ Hız
+- Ziyaretçi sayfası verisi önbellekten gelir; her ziyarette veritabanına gidilmez. Admin'de yapılan her kayıt önbelleği hemen tazeler.
+- Admin paneli ilk açılışta 2,6 MB yerine ~175 KB JavaScript indirir (ikon seçici yalnızca kullanılan ikonları yükler, grafikler Analitik açılınca yüklenir). Ziyaretçi sayfasının animasyon kütüphanesi hafif modda.
+
+### 🐞 Düzeltmeler
+- Silinmiş ya da geçersiz bir linke tıklama isteği hata (500) yerine sessizce yok sayılıyor.
+- Linkin adresi değişince eski "açılmıyor" uyarısı siliniyor.
+
 # 1.4.2
 
 ### 🐞 Açılır menüler

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { withRevision } from '@/lib/revisions'
 import { prisma } from '@/lib/prisma'
 import { isAuthenticated } from '@/lib/auth'
 import { toClientProfile } from '@/lib/profile'
@@ -33,7 +34,7 @@ export async function PUT(request: NextRequest) {
       return NextResponse.json({ error: 'Profile not found' }, { status: 404 })
     }
 
-    const updatedProfile = await prisma.profile.update({
+    const updatedProfile = await withRevision('Görünüm', () => prisma.profile.update({
       where: { id: profile.id },
       data: {
         themePreset: themePreset || 'purple-dream',
@@ -52,7 +53,7 @@ export async function PUT(request: NextRequest) {
         // Sayfa düzeni: classic (liste) | grid (bento ızgara); gönderilmezse değişmez
         ...(layout !== undefined ? { layout: layout === 'grid' ? 'grid' : 'classic' } : {}),
       },
-    })
+    }))
 
     return NextResponse.json(toClientProfile(updatedProfile))
   } catch (error) {

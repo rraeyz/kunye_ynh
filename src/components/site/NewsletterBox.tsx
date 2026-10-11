@@ -7,6 +7,8 @@ export default function NewsletterBox() {
   const [email, setEmail] = useState('')
   const [state, setState] = useState<'idle' | 'sending' | 'done' | 'error'>('idle')
   const [error, setError] = useState('')
+  // E-posta onayı açıksa kayıt, gelen e-postadaki linke tıklanınca tamamlanır
+  const [pending, setPending] = useState(false)
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -20,6 +22,7 @@ export default function NewsletterBox() {
       })
       const data = await response.json().catch(() => ({}))
       if (!response.ok) throw new Error(data.error || 'Abonelik başarısız')
+      setPending(!!data.pending)
       setState('done')
       setEmail('')
     } catch (err) {
@@ -32,7 +35,7 @@ export default function NewsletterBox() {
     <form onSubmit={submit} className="site-card p-5 flex flex-col gap-3">
       <label htmlFor="newsletter-email" className="font-semibold text-dynamic-text">Yeni içeriklerden haberdar ol</label>
       {state === 'done' ? (
-        <p className="text-sm text-dynamic-text opacity-80" role="status">Abone oldun, teşekkürler!</p>
+        <p className="text-sm text-dynamic-text opacity-80" role="status">{pending ? 'Neredeyse tamam: e-postana gelen linke tıklayıp aboneliğini onayla.' : 'Abone oldun, teşekkürler!'}</p>
       ) : (
         <div className="flex gap-2">
           <input

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { withRevision } from '@/lib/revisions'
 import { prisma } from '@/lib/prisma'
 import { isAuthenticated } from '@/lib/auth'
 import { toClientProfile } from '@/lib/profile'
@@ -25,10 +26,10 @@ export async function PUT(request: NextRequest) {
     if (ogImageUrl !== undefined) updateData.ogImageUrl = ogImageUrl || ""
     if (faviconUrl !== undefined) updateData.faviconUrl = faviconUrl || ""
 
-    const updatedProfile = await prisma.profile.update({
+    const updatedProfile = await withRevision('SEO', () => prisma.profile.update({
       where: { id: profile.id },
       data: updateData,
-    })
+    }))
 
     return NextResponse.json(toClientProfile(updatedProfile))
   } catch (error) {

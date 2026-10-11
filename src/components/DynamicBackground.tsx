@@ -1,6 +1,6 @@
 'use client'
 
-import { motion } from 'framer-motion'
+import { m as motion } from 'framer-motion' // hafif mod: bkz. MotionProvider
 
 // Sabit tohumlu sözde rastgele sayı: her çizimde aynı yıldız haritası (hidrasyon uyuşmazlığı olmaz)
 function seeded(seed: number) {

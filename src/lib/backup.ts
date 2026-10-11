@@ -2,7 +2,7 @@ import fs from 'fs/promises'
 import path from 'path'
 import sharp from 'sharp'
 import { prisma } from '@/lib/prisma'
-import { PROFILE_EDITABLE_FIELDS, normalizeProfileCard } from '@/lib/profile'
+import { PROFILE_EDITABLE_FIELDS, PROFILE_SETTINGS_FIELDS, normalizeProfileCard, normalizeSettings } from '@/lib/profile'
 import { LINK_TYPES, isImageUrl, normalizeSlug, parseDate, parseImages } from '@/lib/links'
 import { isSafeUrl, isValidEmail } from '@/lib/security'
 import { FILE_NAME_PATTERN, UPLOAD_DIR } from '@/lib/uploads'
@@ -12,14 +12,15 @@ import pkg from '../../package.json'
 // Yedek alma ve yedekten geri yükleme (Ayarlar → Yedekleme).
 // Admin hesabı hiçbir yedeğe girmez ve geri yüklemede değişmez: yüklemeyi yapan kişi kendini kilitleyemez.
 
-// "Yalnızca profil ve görünüm" yedeğine SMTP ve analitik saklama ayarı girmez
-const PROFILE_ONLY_FIELDS = PROFILE_EDITABLE_FIELDS.filter((field) => !field.startsWith('smtp') && field !== 'analyticsRetentionDays')
+// "Yalnızca profil ve görünüm" yedeğine SMTP, bildirim ve diğer ayarlar girmez
+const PROFILE_ONLY_FIELDS = PROFILE_EDITABLE_FIELDS.filter((field) => !PROFILE_SETTINGS_FIELDS.has(field))
 const profileFieldsFor = (kind: BackupKind): readonly string[] => (kind === 'profile' ? PROFILE_ONLY_FIELDS : PROFILE_EDITABLE_FIELDS)
 
 const PROFILE_INT_FIELDS = new Set(['backgroundOpacity', 'analyticsRetentionDays', 'smtpPort'])
 const PROFILE_BOOLEAN_FIELDS = new Set([
   'showContactButton', 'showShareButton', 'showNewsletter', 'showCategoryTabs',
   'showVCard', 'darkMode', 'verified', 'smtpSecure', 'showSocialIcons',
+  'newsletterDoubleOptIn', 'autoBackupEnabled', 'weeklyReportEnabled', 'linkHealthEnabled',
 ])
 const PROFILE_IMAGE_FIELDS = new Set(['imageUrl', 'faviconUrl', 'ogImageUrl', 'backgroundImage', 'coverImage'])
 const PROFILE_LINK_FIELDS = new Set(['linkedinUrl', 'twitterUrl', 'discordUrl', 'youtubeUrl', 'instagramUrl', 'githubUrl'])
@@ -72,6 +73,7 @@ export async function createBackup(kind: BackupKind) {
 
   if (kind === 'full') {
     backup.subscribers = await prisma.subscriber.findMany({ orderBy: { id: 'asc' } })
+    backup.contactMessages = await prisma.contactMessage.findMany({ orderBy: { id: 'asc' } })
     backup.analytics = await prisma.analytics.findMany({ orderBy: { id: 'asc' } })
     backup.pageViews = await prisma.pageView.findMany({ orderBy: { id: 'asc' } })
   }
@@ -114,6 +116,10 @@ function profileFromBackup(raw: Record<string, any>, kind: BackupKind): { data: 
     if (data[field] && !isSafeUrl(data[field])) data[field] = ''
   }
   if (data.layout !== undefined) data.layout = data.layout === 'grid' ? 'grid' : 'classic'
+  // Bildirim ayarları geçersizse yüklemeyi bozmak yerine boş bırakılır
+  for (const field of ['notifyNtfyUrl', 'notifyTelegramToken', 'notifyTelegramChatId']) {
+    if (data[field] !== undefined && normalizeSettings({ [field]: data[field] })) data[field] = ''
+  }
   const invalid = normalizeProfileCard(data)
   return invalid ?? { data }
 }
@@ -203,6 +209,7 @@ export async function restoreBackup(backup: any): Promise<RestoreResult | { erro
       await tx.analytics.deleteMany({})
       await tx.pageView.deleteMany({})
       await tx.subscriber.deleteMany({})
+      await tx.contactMessage.deleteMany({})
       await tx.link.deleteMany({})
       for (const link of links) await tx.link.create({ data: linksHaveIds ? link : { ...link, id: undefined } })
       result.links = links.length
@@ -210,9 +217,19 @@ export async function restoreBackup(backup: any): Promise<RestoreResult | { erro
       const seenEmails = new Set<string>()
       const subscribers = (Array.isArray(backup.subscribers) ? backup.subscribers : [])
         .filter((s: any) => isValidEmail(s?.email) && !seenEmails.has(s.email.toLowerCase()) && seenEmails.add(s.email.toLowerCase()))
-        .map((s: any) => ({ email: String(s.email), name: str(s.name, 200), createdAt: parseDate(s.createdAt) ?? new Date() }))
+        .map((s: any) => ({ email: String(s.email), name: str(s.name, 200), confirmed: s.confirmed !== false, createdAt: parseDate(s.createdAt) ?? new Date() }))
       if (subscribers.length) await tx.subscriber.createMany({ data: subscribers })
       result.subscribers = subscribers.length
+
+      // İletişim mesajları (1.5.0 öncesi yedeklerde yok)
+      const messages = (Array.isArray(backup.contactMessages) ? backup.contactMessages : [])
+        .filter((m: any) => m && typeof m === 'object' && m.message)
+        .map((m: any) => ({
+          createdAt: parseDate(m.createdAt) ?? new Date(),
+          name: str(m.name, 200), email: str(m.email, 254), message: str(m.message, 5000),
+          read: m.read === true, emailed: m.emailed === true,
+        }))
+      if (messages.length) await tx.contactMessage.createMany({ data: messages })
 
       // Analitik kayıtları yalnızca geri yüklenen bloklara bağlıysa alınır
       const linkIds = new Set(linksHaveIds ? links.map((link: any) => link.id) : [])
@@ -262,4 +279,51 @@ export async function restoreBackup(backup: any): Promise<RestoreResult | { erro
   }, { timeout: 120_000, maxWait: 10_000 })
 
   return result
+}
+
+// ---------------------------------------------------------------- otomatik yedek
+
+// Veritabanının bulunduğu klasör (Docker: /app/prisma, YunoHost: $data_dir/prisma). Kalıcı volume olduğu için
+// otomatik yedekler de burada durur.
+export function databaseDir(): string {
+  const url = process.env.DATABASE_URL || 'file:/app/prisma/dev.db'
+  return path.dirname(path.resolve(url.replace(/^file:/, '')))
+}
+
+export const AUTO_BACKUP_KEEP = 7
+const AUTO_BACKUP_PATTERN = /^kunye-full-\d{4}-\d{2}-\d{2}\.json$/
+const autoBackupDir = () => path.join(databaseDir(), 'auto-backups')
+
+// Ayarlar → Yedekleme → "Otomatik yedek" açıksa günde bir kez çalışır: tam yedeği sunucuya yazar,
+// son AUTO_BACKUP_KEEP günü tutar. Panelden indirilip "Yedekten yükle" ile geri yüklenebilir.
+export async function writeAutoBackup(): Promise<string> {
+  const dir = autoBackupDir()
+  await fs.mkdir(dir, { recursive: true })
+  const name = `kunye-full-${new Date().toISOString().slice(0, 10)}.json`
+  const tmp = path.join(dir, `${name}.tmp`)
+  await fs.writeFile(tmp, JSON.stringify(await createBackup('full')))
+  await fs.rename(tmp, path.join(dir, name)) // yarım dosya hiç görünmez
+
+  const old = (await listAutoBackups()).slice(AUTO_BACKUP_KEEP)
+  for (const backup of old) await fs.unlink(path.join(dir, backup.name)).catch(() => {})
+  // Genel Bakış'taki "Son yedek" satırı (db-backup.js ile aynı dosya)
+  await fs.writeFile(path.join(databaseDir(), '.last-backup'), JSON.stringify({ at: new Date().toISOString() })).catch(() => {})
+  return name
+}
+
+// En yeni önce
+export async function listAutoBackups(): Promise<Array<{ name: string; size: number; createdAt: string }>> {
+  const dir = autoBackupDir()
+  const names = (await fs.readdir(dir).catch(() => [] as string[])).filter((name) => AUTO_BACKUP_PATTERN.test(name))
+  const list = await Promise.all(names.map(async (name) => {
+    const stat = await fs.stat(path.join(dir, name))
+    return { name, size: stat.size, createdAt: stat.mtime.toISOString() }
+  }))
+  return list.sort((a, b) => b.name.localeCompare(a.name))
+}
+
+// Yalnızca bizim adlandırdığımız dosyalar okunur (../ ile klasör dışına çıkılamaz)
+export async function readAutoBackup(name: string): Promise<Buffer | null> {
+  if (!AUTO_BACKUP_PATTERN.test(name)) return null
+  return fs.readFile(path.join(autoBackupDir(), name)).catch(() => null)
 }

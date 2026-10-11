@@ -89,7 +89,11 @@ docker compose restart                      # yeniden başlat
   ```bash
   docker exec personal-linktree node -e "new (require('better-sqlite3'))('/app/prisma/dev.db').exec('DELETE FROM Admin')"
   ```
-  Ardından `/setup` sihirbazını yeniden çalıştırın. Linkler, analitik ve aboneler korunur.
+  Ardından `/setup` sihirbazını yeniden çalıştırın. Linkler, analitik ve aboneler korunur. Bu işlem iki adımlı doğrulamayı da kapatır.
+- **İki adımlı doğrulamada telefonumu kaybettim:** Girişte kod yerine kurtarma kodlarından birini yazın. Kurtarma kodlarınız da yoksa yalnızca iki adımlı doğrulamayı kapatın (şifreniz değişmez):
+  ```bash
+  docker exec personal-linktree node -e "new (require('better-sqlite3'))('/app/prisma/dev.db').exec(\"UPDATE Admin SET totpSecret='', totpRecovery=''\")"
+  ```
 - **Port 3000 kullanımda:** `docker-compose.yml` içinde `"3001:3000"` gibi başka bir port verin.
 - **`/app/.env` bir klasör olarak oluşmuş:** Container'ı durdurun, `rm -r .env && touch .env` çalıştırıp yeniden başlatın.
 - **E-posta gitmiyor:** Gmail için "uygulama şifresi" kullanın (smtp.gmail.com, port 587, Secure kapalı).

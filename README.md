@@ -14,20 +14,27 @@ Kendi sunucunuzda çalışan, analitikli ve bültenli bir "link in bio" sayfası
 - Öne çıkan link/proje, link önizleme görseli (yükleme veya siteden otomatik alma), kategori sekmeleri
 - 9 hazır tema (Gece Gökyüzü dahil); renk, 7 yazı tipi (Türkçe karakter destekli, sunucudan servis edilir), buton stili, köşe yuvarlaklığı, arka plan (düz, gradient, parçacık, mesh, yıldızlı gece, görsel), kapak görseli
 - Şifreli linkler (URL sayfa kaynağında görünmez), zamanlanmış linkler, kısa linkler (`/go/<slug>`)
-- SEO: başlık/açıklama, Open Graph görseli, favicon, `robots.txt`, `sitemap.xml`
+- SEO: başlık/açıklama, Open Graph görseli (yüklenmezse profilden otomatik üretilen paylaşım kartı), favicon, yapısal veri (JSON-LD), `robots.txt`, `sitemap.xml`
 
 **Admin paneli** (`/admin`)
 - Sol menülü düzen; telefonda alt menü. Ctrl/⌘+K ile bölümler ve işlemler arasında arama
 - Genel Bakış: son 7/30 günün özeti, en çok tıklananlar, site durumu (son yedek, e-posta ayarı, zamanlanmış linkler)
 - Profil, linkler ve bloklar (sürükle-bırak sıralama, satır içi düzenleme), tema ve düzen, QR kod
+- Geri al / ileri al: profil, görünüm ve bloklardaki son 30 değişiklik
 - Canlı önizleme: telefon çerçevesinde site, her kayıttan sonra kendiliğinden yenilenir
 - Görsel yükleme: otomatik boyutlandırma, EXIF/konum bilgisi silinir, hareketli GIF desteği
-- Analitik: profil görüntülenme, tekil ziyaretçi, etkileşim oranı, tıklamalar, cihaz/tarayıcı/ülke, trafik kaynakları, UTM kampanyaları, CSV dışa aktarma, saklama süresi
-- E-posta: canlı önizleme, birden fazla alıcı veya tüm abonelere gönderim (kişiye özel "abonelikten çık" linki), kendine test, taslak kaydı, e-posta imzası
+- Analitik: profil görüntülenme, tekil ziyaretçi, etkileşim oranı, tıklamalar, önceki döneme göre değişim, gün × saat ısı haritası, link bazında detay, cihaz/tarayıcı/ülke, trafik kaynakları, UTM kampanyaları, CSV dışa aktarma, saklama süresi
+- Mesajlar: "Bana yaz" formundan gelenler panelde (SMTP olmasa da), okunmamış rozeti
+- E-posta: canlı önizleme, birden fazla alıcı veya tüm abonelere gönderim (kişiye özel "abonelikten çık" linki), kendine test, taslak kaydı, e-posta imzası, bülten geçmişi
+- Bülten: isteğe bağlı e-posta onayı (çift onay), onay bekleyen aboneler
+- Otomatik işler (günlük): otomatik yedek, link kontrolü (kırık linkler), kullanılmayan görsellerin temizliği, haftalık özet e-postası
+- Anlık bildirim: yeni abone ve mesajda ntfy / Telegram
 - Ayarlar: SMTP, şifre değiştirme, tüm cihazlardan çıkış, yedekleme (tam yedek / sayfa ve ayarlar / yalnızca profil; yedekten yüklemede tür kendiliğinden anlaşılır)
 
 **Güvenlik**
 - Admin şifresi bcrypt ile saklanır; şifre değişince tüm oturumlar kapanır
+- İki adımlı doğrulama (TOTP, kurtarma kodları) ve giriş geçmişi
+- İçerik Güvenlik Politikası (CSP)
 - Giriş, iletişim formu, abonelik ve link şifresi için deneme sınırı (rate limit)
 - SMTP şifresi tarayıcıya hiç gönderilmez; iletişim e-postası sayfa kaynağında görünmez
 - Güvenlik başlıkları, CSRF için Origin kontrolü, SVG/zararlı dosya yükleme engeli
@@ -87,7 +94,8 @@ GitHub Actions her push'ta Docker imajını derler, container'ı başlatır ve b
 src/
   app/            sayfalar ve API route'ları (api/, admin/, go/, media/, setup/, unsubscribe/)
   components/     ziyaretçi sayfası bileşenleri; admin/ altında panel bileşenleri
-  lib/            auth, güvenlik, analitik, yükleme, e-posta şablonu yardımcıları
+  lib/            auth, güvenlik, analitik, yükleme, e-posta şablonu, geri al, otomatik işler yardımcıları
+  instrumentation.ts  açılışta kalıcı gizli anahtar ve günlük otomatik işler
 prisma/           veritabanı şeması
 scripts/          YunoHost paket script'leri (install, upgrade, backup, restore, remove, change_url)
 conf/             YunoHost nginx / docker-compose / systemd şablonları

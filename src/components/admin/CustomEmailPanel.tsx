@@ -36,15 +36,25 @@ export default function CustomEmailPanel({ onNavigate }: { onNavigate?: (tab: Ad
   const [smtpReady, setSmtpReady] = useState<boolean | null>(null)
   const [selfAddress, setSelfAddress] = useState('')
   const [subscribers, setSubscribers] = useState<Array<{ id: number; email: string; name: string }>>([])
+  const [history, setHistory] = useState<Array<{ id: number; createdAt: string; subject: string; recipients: number; sent: number; failed: number }>>([])
   const draftLoaded = useRef(false)
+
+  // Bülten gönderim geçmişi (yalnızca "Tüm abonelere" gönderimler)
+  const loadHistory = () => {
+    fetch('/api/admin/newsletter-history').then((r) => (r.ok ? r.json() : [])).then((list) => {
+      if (Array.isArray(list)) setHistory(list)
+    }).catch(() => {})
+  }
 
   // Profil (kendime test adresi) ve aboneler (öneri listesi + sayı)
   useEffect(() => {
     fetch('/api/profile').then((r) => (r.ok ? r.json() : null)).then((profile) => {
       if (profile) setSelfAddress(profile.contactEmail || profile.smtpFrom || profile.smtpUser || '')
     }).catch(() => {})
+    loadHistory()
     fetch('/api/subscribers').then((r) => (r.ok ? r.json() : [])).then((list) => {
-      if (Array.isArray(list)) setSubscribers(list)
+      // Onay bekleyen abonelere bülten gitmez
+      if (Array.isArray(list)) setSubscribers(list.filter((item) => item.confirmed !== false))
     }).catch(() => {})
   }, [])
 
@@ -156,6 +166,7 @@ export default function CustomEmailPanel({ onNavigate }: { onNavigate?: (tab: Ad
       } else {
         // Gönderilen taslak temizlenir (test gönderimi taslağa dokunmaz)
         clearDraft()
+        if (toSubscribers) loadHistory()
         setResult({ ok: true, text: data.message || 'Gönderildi' })
       }
     } catch {
@@ -288,6 +299,23 @@ export default function CustomEmailPanel({ onNavigate }: { onNavigate?: (tab: Ad
         <p className="text-xs text-gray-500">
           İmza otomatik eklenir: profil fotoğrafı, şirket adı ve adresi (Ayarlar → E-posta İmzası) ve sosyal medya ikonları (Profil → Sosyal medya hesapları).
         </p>
+
+        {history.length > 0 && (
+          <div className="pt-5 border-t border-gray-800">
+            <h3 className="text-sm font-medium text-gray-300 mb-2">Bülten geçmişi</h3>
+            <ul className="divide-y divide-gray-800 border border-gray-800 rounded-xl text-sm">
+              {history.slice(0, 10).map((item) => (
+                <li key={item.id} className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5 px-4 py-2.5">
+                  <span className="text-gray-200 min-w-0 break-words">{item.subject}</span>
+                  <span className="text-xs text-gray-500 whitespace-nowrap">
+                    {new Date(item.createdAt).toLocaleString('tr-TR', { dateStyle: 'medium', timeStyle: 'short' })} · {item.sent}/{item.recipients} gönderildi
+                    {item.failed > 0 && <span className="text-red-400"> · {item.failed} hata</span>}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
       </div>
 
       {/* Önizleme: gönderilecek e-postanın aynısı */}

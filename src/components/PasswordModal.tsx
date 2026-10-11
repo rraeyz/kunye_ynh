@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { motion, AnimatePresence } from 'framer-motion'
+import { m as motion, AnimatePresence } from 'framer-motion' // hafif mod: bkz. MotionProvider
 import { FaLock, FaTimes, FaUnlock, FaInfoCircle } from 'react-icons/fa'
 
 interface PasswordModalProps {

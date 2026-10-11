@@ -22,6 +22,8 @@ interface Overview {
     upcoming: number
     nextUpcoming: { title: string; startDate: string } | null
     expired: number
+    broken: string[]
+    unreadMessages: number
     version: string
   }
 }
@@ -210,7 +212,27 @@ export default function OverviewPanel({ name, onNavigate, onAddLink }: OverviewP
                   detail={new Date(data.status.lastBackup).toLocaleString('tr-TR')}
                 />
               ) : (
-                <StatusRow tone="info" title="Otomatik yedek kaydı yok" detail="YunoHost kurulumunda her gece yedek alınır; ilk yedekten sonra burada görünür." />
+                <StatusRow
+                  tone="info"
+                  title="Yedek kaydı yok"
+                  detail="YunoHost kurulumunda her gece yedek alınır. Ayarlar → Otomatik işler'den otomatik yedeği de açabilirsin."
+                  action={{ label: 'Ayarlar', onClick: () => onNavigate('settings') }}
+                />
+              )}
+              {data.status.unreadMessages > 0 && (
+                <StatusRow
+                  tone="warn"
+                  title={`${data.status.unreadMessages} okunmamış mesaj`}
+                  action={{ label: 'Oku', onClick: () => onNavigate('messages') }}
+                />
+              )}
+              {data.status.broken.length > 0 && (
+                <StatusRow
+                  tone="warn"
+                  title={`${data.status.broken.length} linke ulaşılamıyor`}
+                  detail={data.status.broken.slice(0, 3).map((title) => `"${title}"`).join(', ') + (data.status.broken.length > 3 ? '...' : '')}
+                  action={{ label: 'Göster', onClick: () => onNavigate('links') }}
+                />
               )}
               {data.status.smtpConfigured ? (
                 <StatusRow tone="ok" title="E-posta gönderimi ayarlı" />
@@ -218,7 +240,7 @@ export default function OverviewPanel({ name, onNavigate, onAddLink }: OverviewP
                 <StatusRow
                   tone="warn"
                   title="E-posta ayarlı değil"
-                  detail="İletişim formu ve bülten mesaj gönderemez."
+                  detail="Bülten gönderilemez; iletişim mesajları yalnızca panelde (Mesajlar) birikir."
                   action={{ label: 'Ayarla', onClick: () => onNavigate('settings') }}
                 />
               )}
