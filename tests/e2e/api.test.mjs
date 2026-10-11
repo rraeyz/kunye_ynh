@@ -750,6 +750,23 @@ test('blok kopyalama', async () => {
   await req(`/api/links/${source.id}`, { method: 'PUT', cookie: admin, body: { slug: '' } })
 })
 
+test('mesajlara panelden yanıt', async () => {
+  await req('/api/profile', { method: 'PUT', cookie: admin, body: { contactEmail: 'ben@example.com' } })
+  assert.equal((await req('/api/contact', { method: 'POST', headers: ip(160), body: { name: 'Yanıt Testi', email: 'yt@example.com', message: 'Merhaba' } })).status, 200)
+  const message = (await req('/api/admin/messages', { cookie: admin })).data.find((m) => m.name === 'Yanıt Testi')
+  assert.deepEqual(message.replies, [], 'mesajlar yanıtlarıyla gelmeli')
+  const reply = (body, cookie = admin, id = message.id) => req(`/api/admin/messages/${id}/reply`, { method: 'POST', cookie, body })
+  assert.equal((await reply({ body: 'Selam' }, '')).status, 401)
+  assert.equal((await reply({ body: '   ' })).status, 400)
+  assert.equal((await reply({ body: 'Selam' }, admin, 999999)).status, 404)
+  const noSmtp = await reply({ body: 'Selam' })
+  assert.equal(noSmtp.status, 400, 'SMTP yokken gönderilmemeli')
+  assert.match(noSmtp.data.error, /SMTP/)
+  assert.deepEqual((await req('/api/admin/messages', { cookie: admin })).data.find((m) => m.id === message.id).replies, [], 'gönderilemeyen yanıt kaydedilmemeli')
+  await req(`/api/admin/messages/${message.id}`, { method: 'DELETE', cookie: admin })
+  await req('/api/profile', { method: 'PUT', cookie: admin, body: { contactEmail: '' } })
+})
+
 test('giriş rate limit: sadece hatalı denemeler sayılır', async () => {
   for (let i = 0; i < 12; i++) {
     assert.equal((await req('/api/auth/login', { method: 'POST', headers: ip(40), body: { username: 'admin', password: PASSWORD } })).status, 200)

@@ -77,7 +77,7 @@ export async function createBackup(kind: BackupKind) {
 
   if (kind === 'full') {
     backup.subscribers = await prisma.subscriber.findMany({ orderBy: { id: 'asc' } })
-    backup.contactMessages = await prisma.contactMessage.findMany({ orderBy: { id: 'asc' } })
+    backup.contactMessages = await prisma.contactMessage.findMany({ orderBy: { id: 'asc' }, include: { replies: { orderBy: { id: 'asc' } } } })
     backup.analytics = await prisma.analytics.findMany({ orderBy: { id: 'asc' } })
     backup.pageViews = await prisma.pageView.findMany({ orderBy: { id: 'asc' } })
   }
@@ -237,8 +237,14 @@ export async function restoreBackup(backup: any): Promise<RestoreResult | { erro
           createdAt: parseDate(m.createdAt) ?? new Date(),
           name: str(m.name, 200), email: str(m.email, 254), message: str(m.message, 5000),
           read: m.read === true, emailed: m.emailed === true,
+          replies: (Array.isArray(m.replies) ? m.replies : [])
+            .filter((r: any) => r && r.body)
+            .map((r: any) => ({ body: str(r.body, 20_000), createdAt: parseDate(r.createdAt) ?? new Date() })),
         }))
-      if (messages.length) await tx.contactMessage.createMany({ data: messages })
+      // Yanıtlarıyla birlikte (iç içe kayıt createMany ile yazılamaz)
+      for (const { replies, ...message } of messages) {
+        await tx.contactMessage.create({ data: { ...message, replies: { create: replies } } })
+      }
 
       // Analitik kayıtları yalnızca geri yüklenen bloklara bağlıysa alınır
       const linkIds = new Set(linksHaveIds ? links.map((link: any) => link.id) : [])

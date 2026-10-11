@@ -13,6 +13,6 @@ export async function GET(request: NextRequest) {
   if (request.nextUrl.searchParams.get('unread')) {
     return NextResponse.json({ unread: await prisma.contactMessage.count({ where: { read: false } }) })
   }
-  const messages = await prisma.contactMessage.findMany({ orderBy: { id: 'desc' }, take: 500 })
+  const messages = await prisma.contactMessage.findMany({ orderBy: { id: 'desc' }, take: 500, include: { replies: { orderBy: { id: 'asc' } } } })
   return NextResponse.json(messages)
 }
