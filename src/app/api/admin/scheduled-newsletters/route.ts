@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
-import { isAuthenticated } from '@/lib/auth'
+import { hasValidApiToken, isAuthenticated } from '@/lib/auth'
 import { getBaseUrl } from '@/lib/url'
 import { isSmtpConfigured, loadMailProfile } from '@/lib/mailer'
 import { normalizeTags, sendDueNewsletters } from '@/lib/newsletter'
@@ -12,14 +12,17 @@ const MAX_PENDING = 50
 
 const unauthorized = () => NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
+// Panel oturumu ya da API anahtarı (Authorization: Bearer ...) ile; yalnızca listeleme ve planlama
+const canSchedule = async (request: NextRequest) => (await isAuthenticated()) || hasValidApiToken(request.headers)
+
 // Planlanmış bültenler: bekleyenler ve son gönderilenler
-export async function GET() {
-  if (!(await isAuthenticated())) return unauthorized()
+export async function GET(request: NextRequest) {
+  if (!(await canSchedule(request))) return unauthorized()
   return NextResponse.json(await prisma.scheduledNewsletter.findMany({ orderBy: { sendAt: 'desc' }, take: 50 }))
 }
 
 export async function POST(request: NextRequest) {
-  if (!(await isAuthenticated())) return unauthorized()
+  if (!(await canSchedule(request))) return unauthorized()
   const body = await request.json().catch(() => ({}))
   const subject = typeof body.subject === 'string' ? body.subject.trim().slice(0, 300) : ''
   const message = typeof body.message === 'string' ? body.message : ''

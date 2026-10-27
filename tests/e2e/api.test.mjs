@@ -881,6 +881,24 @@ test('planlanmış bülten', async () => {
   assert.equal((await req(`/api/admin/scheduled-newsletters?id=${later.data.id}`, { method: 'DELETE', cookie: admin })).status, 404)
   assert.deepEqual((await req('/api/admin/scheduled-newsletters', { cookie: admin })).data, [])
 
+  // API anahtarı: dış uygulama (blog) yalnızca listeleyip planlayabilir
+  const sec = (body) => req('/api/admin/security', { method: 'POST', cookie: admin, body })
+  const bearer = (token) => ({ authorization: `Bearer ${token}` })
+  assert.equal((await sec({ action: 'api-token-create', password: 'yanlis' })).status, 401)
+  const created = await sec({ action: 'api-token-create', password: PASSWORD })
+  assert.equal(created.status, 200)
+  const token = created.data.apiToken
+  assert.equal((await req('/api/admin/security', { cookie: admin })).data.apiToken.enabled, true)
+  const viaApi = await req('/api/admin/scheduled-newsletters', { method: 'POST', headers: bearer(token), body: { subject: 'Blog', message: 'M', sendAt: inAnHour } })
+  assert.equal(viaApi.status, 200)
+  assert.equal((await req('/api/admin/scheduled-newsletters', { headers: bearer(token) })).data[0].subject, 'Blog')
+  assert.equal((await req('/api/admin/scheduled-newsletters', { headers: bearer(`${token}x`) })).status, 401)
+  assert.equal((await req(`/api/admin/scheduled-newsletters?id=${viaApi.data.id}`, { method: 'DELETE', headers: bearer(token) })).status, 401, 'anahtar bülten silemez')
+  assert.equal((await req('/api/subscribers', { headers: bearer(token) })).status, 401, 'anahtar panelin geri kalanına erişemez')
+  assert.equal((await sec({ action: 'api-token-revoke' })).status, 200)
+  assert.equal((await req('/api/admin/scheduled-newsletters', { headers: bearer(token) })).status, 401, 'silinen anahtar çalışmamalı')
+  assert.equal((await req(`/api/admin/scheduled-newsletters?id=${viaApi.data.id}`, { method: 'DELETE', cookie: admin })).status, 200)
+
   await req('/api/profile', { method: 'PUT', cookie: admin, body: { smtpHost: 'smtp.example.com', smtpPort: 587, smtpUser: '', smtpPassword: '' } })
 })
 
