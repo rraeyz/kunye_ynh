@@ -19,6 +19,12 @@ services:
       - __DATA_DIR__/prisma:/app/prisma
       - __DATA_DIR__/uploads:/app/public/uploads
       - __DATA_DIR__/.env:/app/.env
+    # Container günlükleri en fazla 3 × 10 MB; Docker'ın varsayılanında sınırsız büyür
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
     # localhost Alpine'de ::1'e gidebilir; Next.js yalnızca IPv4'te dinliyor
     healthcheck:
       test: ["CMD", "wget", "--spider", "-q", "http://127.0.0.1:3000/api/health"]
