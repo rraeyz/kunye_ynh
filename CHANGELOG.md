@@ -1,5 +1,6 @@
 # Sonraki sürüm
 
+- **Disk:** YunoHost kurulum ve güncellemesi Docker derleme önbelleğini siler (her güncellemede birikip bir ara 140 GB'ı bulmuştu); container günlükleri 3 × 10 MB ile sınırlı.
 - **Bültene özel gönderen adı:** API ile planlanan bülten kendi gönderen adını verebilir (ör. blog bülteni gelen kutusunda "Raeyz | Support" yerine blogun adıyla görünür). Panelden gönderilen e-postalar profildeki adla gitmeye devam eder.
 - Docker sağlık kontrolü `localhost` yerine `127.0.0.1` adresine bakıyor; container çalıştığı hâlde "unhealthy" görünmüyor.
 - **Başka uygulamadan abonelik:** API anahtarıyla yapılan abonelik isteği (ör. blogun abonelik kutusu) IP sınırına takılmaz ve isteğe bağlı bir etiket alır. IP sınırını isteği gönderen uygulama kendi ziyaretçileri için uygular.
