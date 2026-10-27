@@ -895,6 +895,16 @@ test('planlanmış bülten', async () => {
   assert.equal((await req('/api/admin/scheduled-newsletters', { headers: bearer(`${token}x`) })).status, 401)
   assert.equal((await req(`/api/admin/scheduled-newsletters?id=${viaApi.data.id}`, { method: 'DELETE', headers: bearer(token) })).status, 401, 'anahtar bülten silemez')
   assert.equal((await req('/api/subscribers', { headers: bearer(token) })).status, 401, 'anahtar panelin geri kalanına erişemez')
+
+  // Blogun abonelik kutusu: tüm ziyaretçiler tek sunucu IP'sinden gelir, IP sınırına takılmaz ve etiketlenir
+  for (let i = 0; i < 12; i++) {
+    const res = await req('/api/subscribe', { method: 'POST', headers: { ...bearer(token), ...ip(170) }, body: { email: `blog${i}@example.com`, tag: 'Blog' } })
+    assert.equal(res.status, 200, `API ile abonelik ${i}`)
+  }
+  await req('/api/subscribe', { method: 'POST', headers: ip(171), body: { email: 'etiketsiz@example.com', tag: 'Blog' } })
+  const subscribers = (await req('/api/subscribers', { cookie: admin })).data
+  assert.equal(subscribers.find((s) => s.email === 'blog11@example.com').tags, 'Blog')
+  assert.equal(subscribers.find((s) => s.email === 'etiketsiz@example.com').tags, '', 'anahtarsız istek etiket veremez')
   assert.equal((await sec({ action: 'api-token-revoke' })).status, 200)
   assert.equal((await req('/api/admin/scheduled-newsletters', { headers: bearer(token) })).status, 401, 'silinen anahtar çalışmamalı')
   assert.equal((await req(`/api/admin/scheduled-newsletters?id=${viaApi.data.id}`, { method: 'DELETE', cookie: admin })).status, 200)

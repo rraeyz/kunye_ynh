@@ -1,5 +1,6 @@
 # Sonraki sürüm
 
+- **Başka uygulamadan abonelik:** API anahtarıyla yapılan abonelik isteği (ör. blogun abonelik kutusu) IP sınırına takılmaz ve isteğe bağlı bir etiket alır. IP sınırını isteği gönderen uygulama kendi ziyaretçileri için uygular.
 - **API anahtarı:** Ayarlar → Güvenlik'ten oluşturulur (şifre ister, yalnızca bir kez gösterilir). Başka bir uygulama (ör. blog) bu anahtarla `Authorization: Bearer ...` başlığıyla abonelere bülten planlayabilir ve planlananları listeleyebilir; panelin geri kalanına erişemez. Anahtar silinince hemen geçersiz olur.
 
 # 1.5.0~ynh2 (YunoHost paketi)
