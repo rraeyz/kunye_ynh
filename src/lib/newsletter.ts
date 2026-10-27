@@ -27,12 +27,12 @@ export function normalizeTags(input: unknown): string {
 export const splitTags = (tags: string) => (tags ? tags.split(',').map((t) => t.trim()).filter(Boolean) : [])
 export const hasTag = (tags: string, tag: string) => splitTags(tags).some((t) => tagKey(t) === tagKey(tag))
 
-type SendOptions = { subject: string; message: string; baseUrl: string; subscriberIds?: number[]; tag?: string }
+type SendOptions = { subject: string; message: string; baseUrl: string; subscriberIds?: number[]; tag?: string; fromName?: string }
 export type SendResult = { recipients: number; success: number; failed: number; errors: string[] }
 
 // Onaylı abonelere (seçilenlere ya da bir etikete) ayrı ayrı gönderir, geçmişe yazar.
 // SMTP ayarlı değilse hata fırlatır; alıcı yoksa recipients 0 döner.
-export async function sendNewsletter({ subject, message, baseUrl, subscriberIds, tag }: SendOptions): Promise<SendResult> {
+export async function sendNewsletter({ subject, message, baseUrl, subscriberIds, tag, fromName }: SendOptions): Promise<SendResult> {
   const ids = Array.isArray(subscriberIds) ? subscriberIds.map(Number).filter(Number.isInteger) : []
   let subscribers = await prisma.subscriber.findMany({
     where: { confirmed: true, ...(ids.length > 0 ? { id: { in: ids } } : {}) },
@@ -46,7 +46,7 @@ export async function sendNewsletter({ subject, message, baseUrl, subscriberIds,
     throw new Error('SMTP ayarları yapılandırılmamış. Ayarlar sayfasından SMTP ayarlarını girin.')
   }
   const transporter = createMailTransport(profile)
-  const from = senderAddress(profile)
+  const from = senderAddress(profile, fromName || profile.smtpFromName)
 
   // Paralel gönderim (her seferinde 5 email)
   const batchSize = 5
@@ -106,7 +106,7 @@ export async function sendDueNewsletters(): Promise<number> {
     let status = 'sent'
     let result = ''
     try {
-      const sent = await sendNewsletter({ subject: item.subject, message: item.message, baseUrl: item.baseUrl, tag: item.tag || undefined })
+      const sent = await sendNewsletter({ subject: item.subject, message: item.message, baseUrl: item.baseUrl, tag: item.tag || undefined, fromName: item.fromName })
       if (sent.recipients === 0) {
         status = 'failed'
         result = 'Gönderilecek abone yoktu'
