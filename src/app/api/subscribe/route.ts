@@ -6,21 +6,28 @@ import { confirmUrl } from '@/lib/unsubscribe'
 import { getBaseUrl } from '@/lib/url'
 import { notifyAdmin } from '@/lib/notify'
 import { inBackground, sendWelcomeEmail } from '@/lib/autoMail'
+import { hasValidApiToken } from '@/lib/auth'
+import { normalizeTags } from '@/lib/newsletter'
 
 const SUBSCRIBED = 'Bültene başarıyla abone oldunuz!'
 const PENDING = 'Neredeyse tamam! E-postanıza gelen linke tıklayarak aboneliğinizi onaylayın.'
 
 export async function POST(request: NextRequest) {
   try {
+    // API anahtarıyla gelen istek (ör. blogun abonelik kutusu) tüm ziyaretçileri tek sunucu IP'sinden getirir:
+    // IP sınırını o uygulama kendi ziyaretçileri için uygular; burada yalnızca etiket eklenir
+    const viaApi = await hasValidApiToken(request.headers)
+
     // Spam koruması: IP başına saatte 10 abonelik
-    if (isRateLimited(`subscribe:${getClientIp(request.headers)}`, 10, 60 * 60 * 1000)) {
+    if (!viaApi && isRateLimited(`subscribe:${getClientIp(request.headers)}`, 10, 60 * 60 * 1000)) {
       return NextResponse.json(
         { error: 'Çok fazla deneme. Lütfen daha sonra tekrar deneyin.' },
         { status: 429 }
       )
     }
 
-    const { email, name } = await request.json()
+    const { email, name, tag } = await request.json()
+    const apiTag = viaApi ? normalizeTags(tag).split(',')[0].trim() : ''
 
     // E-posta validasyonu
     if (!isValidEmail(email)) {
@@ -48,8 +55,8 @@ export async function POST(request: NextRequest) {
 
     await prisma.subscriber.upsert({
       where: { email: normalizedEmail },
-      update: { name: safeName, confirmed: !needsConfirm },
-      create: { email: normalizedEmail, name: safeName, confirmed: !needsConfirm },
+      update: { name: safeName, confirmed: !needsConfirm, ...(apiTag ? { tags: normalizeTags([...(existing?.tags ?? '').split(','), apiTag]) } : {}) },
+      create: { email: normalizedEmail, name: safeName, confirmed: !needsConfirm, tags: apiTag },
     })
 
     if (needsConfirm && mail) {
