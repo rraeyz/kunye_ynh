@@ -304,6 +304,7 @@ model ScheduledNewsletter {
   message   String
   tag       String   @default("") // Boşsa tüm onaylı abonelere
   baseUrl   String   @default("") // Planlandığı andaki site adresi (linkler ve ikonlar için)
+  fromName  String   @default("") // Boşsa profildeki gönderen adı; blog kendi adını verir
   status    String   @default("pending") // pending | sending | sent | failed
   result    String   @default("")
 }

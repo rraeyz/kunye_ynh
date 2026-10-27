@@ -1,5 +1,7 @@
 # Sonraki sürüm
 
+- **Bültene özel gönderen adı:** API ile planlanan bülten kendi gönderen adını verebilir (ör. blog bülteni gelen kutusunda "Raeyz | Support" yerine blogun adıyla görünür). Panelden gönderilen e-postalar profildeki adla gitmeye devam eder.
+- Docker sağlık kontrolü `localhost` yerine `127.0.0.1` adresine bakıyor; container çalıştığı hâlde "unhealthy" görünmüyor.
 - **Başka uygulamadan abonelik:** API anahtarıyla yapılan abonelik isteği (ör. blogun abonelik kutusu) IP sınırına takılmaz ve isteğe bağlı bir etiket alır. IP sınırını isteği gönderen uygulama kendi ziyaretçileri için uygular.
 - **API anahtarı:** Ayarlar → Güvenlik'ten oluşturulur (şifre ister, yalnızca bir kez gösterilir). Başka bir uygulama (ör. blog) bu anahtarla `Authorization: Bearer ...` başlığıyla abonelere bülten planlayabilir ve planlananları listeleyebilir; panelin geri kalanına erişemez. Anahtar silinince hemen geçersiz olur.
 

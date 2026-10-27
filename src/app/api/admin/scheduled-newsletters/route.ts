@@ -42,8 +42,10 @@ export async function POST(request: NextRequest) {
   }
   // Etiket tek bir değer: normalizeTags temizler, virgüllü girilirse ilki alınır
   const tag = normalizeTags(typeof body.tag === 'string' ? body.tag : '').split(',')[0].trim()
+  // Gönderen adı (ör. blogun adı): yalnızca bu bülten için profildeki "Raeyz | Support" yerine geçer
+  const fromName = typeof body.fromName === 'string' ? body.fromName.replace(/["\\<>\r\n]/g, '').trim().slice(0, 60) : ''
   const item = await prisma.scheduledNewsletter.create({
-    data: { subject, message, sendAt, tag, baseUrl: getBaseUrl(request.headers) },
+    data: { subject, message, sendAt, tag, fromName, baseUrl: getBaseUrl(request.headers) },
   })
   return NextResponse.json(item)
 }

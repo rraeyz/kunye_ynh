@@ -65,9 +65,9 @@ export function createMailTransport(profile: MailProfile) {
 }
 
 // "Gönderen Adı" <adres>
-export function senderAddress(profile: MailProfile): string {
+export function senderAddress(profile: MailProfile, name = profile.smtpFromName): string {
   const address = profile.smtpFrom || profile.smtpUser
-  return profile.smtpFromName ? `"${profile.smtpFromName}" <${address}>` : address
+  return name ? `"${name.replace(/["\\\r\n]/g, '')}" <${address}>` : address
 }
 
 interface BuildOptions {

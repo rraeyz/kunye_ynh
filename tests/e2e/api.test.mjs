@@ -860,6 +860,10 @@ test('planlanmış bülten', async () => {
   assert.equal(later.data.tag, '')
   const tagged = await schedule({ subject: 'Etiketli', message: 'Merhaba', sendAt: inAnHour, tag: 'Yeni' })
   assert.equal(tagged.data.tag, 'Yeni')
+  assert.equal(tagged.data.fromName, '')
+  const named = await schedule({ subject: 'Ad', message: 'M', sendAt: inAnHour, fromName: ' Blog "X"\r\n<a> ' })
+  assert.equal(named.data.fromName, 'Blog Xa', 'gönderen adı başlık enjeksiyonuna karşı temizlenmeli')
+  assert.equal((await req(`/api/admin/scheduled-newsletters?id=${named.data.id}`, { method: 'DELETE', cookie: admin })).status, 200)
 
   // Şimdi gönder: yalnızca "Yeni" etiketli 2 onaylı aboneye denenir
   const now = await req('/api/admin/scheduled-newsletters', { method: 'PATCH', cookie: admin, body: { id: tagged.data.id, sendNow: true } })
