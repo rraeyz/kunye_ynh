@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import bcrypt from 'bcryptjs'
 import { prisma } from '@/lib/prisma'
-import { isAuthenticated } from '@/lib/auth'
+import crypto from 'crypto'
+import { API_TOKEN_STATE, hashApiToken, isAuthenticated } from '@/lib/auth'
 import { deleteState, getState, setState } from '@/lib/appState'
 import { generateRecoveryCodes, generateTotpSecret, hashRecoveryCode, otpauthUrl, verifyTotp } from '@/lib/totp'
 
@@ -20,17 +21,20 @@ export async function GET() {
   if (!(await isAuthenticated())) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
-  const [admin, events] = await Promise.all([
+  const [admin, events, apiToken] = await Promise.all([
     prisma.admin.findFirst({ select: { totpSecret: true, totpRecovery: true } }),
     prisma.loginEvent.findMany({ orderBy: { id: 'desc' }, take: 30 }),
+    getState(API_TOKEN_STATE),
   ])
   return NextResponse.json({
     twoFactor: { enabled: !!admin?.totpSecret, recoveryLeft: recoveryCount(admin?.totpRecovery || '') },
+    apiToken: { enabled: !!apiToken },
     events,
   })
 }
 
 // action: totp-start (anahtar üret) → totp-enable (uygulamadaki kodla onayla) | totp-disable | recovery-regenerate
+// | api-token-create (yenisi eskisini geçersiz kılar) | api-token-revoke
 export async function POST(request: NextRequest) {
   if (!(await isAuthenticated())) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
@@ -75,6 +79,17 @@ export async function POST(request: NextRequest) {
       const codes = generateRecoveryCodes()
       await prisma.admin.update({ where: { id: admin.id }, data: { totpRecovery: JSON.stringify(codes.map(hashRecoveryCode)) } })
       return NextResponse.json({ recoveryCodes: codes })
+    }
+    case 'api-token-create': {
+      // Anahtar yalnızca bu yanıtta görünür; açık kalmış bir oturum şifresiz anahtar çıkaramasın
+      if (!(await passwordOk())) return NextResponse.json({ error: 'Şifre hatalı' }, { status: 401 })
+      const token = crypto.randomBytes(32).toString('base64url')
+      await setState(API_TOKEN_STATE, hashApiToken(token))
+      return NextResponse.json({ apiToken: token })
+    }
+    case 'api-token-revoke': {
+      await deleteState(API_TOKEN_STATE)
+      return NextResponse.json({ success: true })
     }
     default:
       return NextResponse.json({ error: 'Geçersiz işlem' }, { status: 400 })

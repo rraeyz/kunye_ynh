@@ -39,6 +39,9 @@ export default function SecurityPanel() {
   const [code, setCode] = useState('')
   const [password, setPassword] = useState('')
   const [codes, setCodes] = useState<string[]>([])
+  const [apiEnabled, setApiEnabled] = useState(false)
+  const [apiToken, setApiToken] = useState('')
+  const [apiPassword, setApiPassword] = useState('')
   const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null)
   const [busy, setBusy] = useState(false)
 
@@ -48,6 +51,7 @@ export default function SecurityPanel() {
     const data = await response.json()
     setEnabled(data.twoFactor.enabled)
     setRecoveryLeft(data.twoFactor.recoveryLeft)
+    setApiEnabled(data.apiToken.enabled)
     setEvents(data.events)
   }, [])
 
@@ -112,6 +116,27 @@ export default function SecurityPanel() {
       setPassword('')
       setCodes(data.recoveryCodes)
       setMessage({ ok: true, text: 'Yeni kurtarma kodları oluşturuldu; eskiler artık geçersiz.' })
+      load()
+    }
+  }
+
+  const createApiToken = async () => {
+    if (!apiPassword) return setMessage({ ok: false, text: 'API anahtarı için şifreni gir' })
+    if (apiEnabled && !confirm('Yeni anahtar oluşturulursa eskisi çalışmaz. Devam edilsin mi?')) return
+    const data = await call({ action: 'api-token-create', password: apiPassword })
+    if (data) {
+      setApiPassword('')
+      setApiToken(data.apiToken)
+      setMessage({ ok: true, text: 'API anahtarı oluşturuldu. Yalnızca şimdi gösteriliyor; kullanacağın uygulamaya kaydet.' })
+      load()
+    }
+  }
+
+  const revokeApiToken = async () => {
+    if (!confirm('API anahtarı silinsin mi? Onu kullanan uygulamalar bülten planlayamaz.')) return
+    if (await call({ action: 'api-token-revoke' })) {
+      setApiToken('')
+      setMessage({ ok: true, text: 'API anahtarı silindi.' })
       load()
     }
   }
@@ -219,6 +244,36 @@ export default function SecurityPanel() {
               {message.text}
             </div>
           )}
+        </div>
+
+        <div className="pt-6 border-t border-gray-800">
+          <h3 className="text-sm font-medium text-gray-300 mb-1">API anahtarı</h3>
+          <p className="text-sm text-gray-400 mb-4">
+            {apiEnabled ? 'Açık. ' : 'Kapalı. '}
+            Başka bir uygulamanın (ör. blog) abonelerine bülten planlayabilmesi için. Anahtarla yalnızca planlanmış bültenler listelenip yenisi eklenebilir; panelin geri kalanına erişilemez.
+          </p>
+          {apiToken && (
+            <code className="block break-all bg-dark-bg border border-amber-500/40 rounded-lg px-3 py-2 mb-4 text-amber-200 select-all">{apiToken}</code>
+          )}
+          <div className="flex flex-col sm:flex-row gap-3">
+            <input
+              type="password"
+              value={apiPassword}
+              onChange={(e) => setApiPassword(e.target.value)}
+              placeholder="Mevcut şifren"
+              aria-label="API anahtarı için mevcut şifre"
+              autoComplete="current-password"
+              className={`${inputClass} sm:max-w-xs`}
+            />
+            <button type="button" onClick={createApiToken} disabled={busy} className="px-4 py-3 rounded-xl border border-gray-700 text-gray-200 text-sm hover:border-gray-600 disabled:opacity-50">
+              {apiEnabled ? 'Yeni anahtar oluştur' : 'Anahtar oluştur'}
+            </button>
+            {apiEnabled && (
+              <button type="button" onClick={revokeApiToken} disabled={busy} className="px-4 py-3 rounded-xl bg-red-500/10 border border-red-500/40 text-red-400 text-sm hover:bg-red-500/20 disabled:opacity-50">
+                Anahtarı sil
+              </button>
+            )}
+          </div>
         </div>
 
         <div className="pt-6 border-t border-gray-800">

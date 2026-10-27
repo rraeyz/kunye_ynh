@@ -26,7 +26,8 @@ jobs:
 
   docker:
     name: Docker imajı + duman testi
-    runs-on: ubuntu-latest
+    # Playwright 1.56.1 ubuntu-latest'in yeni sürümüne (26.04) tarayıcı kuramıyor
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
 

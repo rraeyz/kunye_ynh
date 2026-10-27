@@ -1,3 +1,7 @@
+# Sonraki sürüm
+
+- **API anahtarı:** Ayarlar → Güvenlik'ten oluşturulur (şifre ister, yalnızca bir kez gösterilir). Başka bir uygulama (ör. blog) bu anahtarla `Authorization: Bearer ...` başlığıyla abonelere bülten planlayabilir ve planlananları listeleyebilir; panelin geri kalanına erişemez. Anahtar silinince hemen geçersiz olur.
+
 # 1.5.0~ynh2 (YunoHost paketi)
 
 - Güncellemede çıkan "docker-compose.yml has been manually modified" uyarısı giderildi. Uyarı zararsızdı: repodaki düz Docker dosyası, YunoHost'un ürettiği dosyanın üstüne kopyalanıyor, YunoHost da hemen ardından doğrusunu yeniden yazıyordu. Artık o dosya hiç kopyalanmıyor.

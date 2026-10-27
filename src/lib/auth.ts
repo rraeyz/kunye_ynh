@@ -123,6 +123,18 @@ function safeEqual(a: string, b: string): boolean {
   return crypto.timingSafeEqual(hashA, hashB)
 }
 
+// Dış uygulamaların (ör. blog) bülten planlaması için API anahtarı (Ayarlar → Güvenlik).
+// Anahtarın kendisi saklanmaz, yalnızca SHA-256 özeti AppState'te durur
+export const API_TOKEN_STATE = 'apiTokenHash'
+export const hashApiToken = (token: string) => crypto.createHash('sha256').update(token).digest('hex')
+
+export async function hasValidApiToken(requestHeaders: Headers): Promise<boolean> {
+  const token = requestHeaders.get('authorization')?.match(/^Bearer\s+(\S+)$/i)?.[1]
+  if (!token) return false
+  const stored = await getState(API_TOKEN_STATE)
+  return !!stored && safeEqual(hashApiToken(token), stored)
+}
+
 export async function isSetupComplete(): Promise<boolean> {
   try {
     const adminCount = await prisma.admin.count()
