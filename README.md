@@ -50,6 +50,14 @@ Kendi sunucunuzda çalışan, analitikli ve bültenli bir "link in bio" sayfası
 
 İlk açılışta `/setup` sihirbazı admin kullanıcısını oluşturur. Ayrıca `.env` ile şifre ayarlamanız gerekmez.
 
+## Blog ile bağlantı
+
+Kardeş uygulama [blog_ynh](https://github.com/rraeyz/blog_ynh) (yapay zekâlı bilim blogu) abone tutmaz ve e-posta göndermez; Künye'nin API'sini kullanır:
+
+1. Künye → Ayarlar → Güvenlik → **API anahtarı oluştur**; anahtarı blogun Ayarlar → Bülten sekmesine Künye adresiyle birlikte gir.
+2. `POST /api/subscribe` (`Authorization: Bearer <anahtar>`): blogdaki abonelik kutusu. Abone, blogun etiketiyle işaretlenir; çift onay açıksa onay e-postasını Künye gönderir.
+3. `POST /api/admin/scheduled-newsletters` (aynı anahtar): blogun haftalık bülteni ve "Haftanın astronomi özeti" buraya planlanır. `fromName` gönderen adını blogun adı yapar, `tag` yalnızca o etiketli abonelere gönderir; Künye dakikada bir bakıp gönderir.
+
 ## Geliştirme
 
 Node.js 20 gerekir.

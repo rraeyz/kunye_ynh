@@ -1,7 +1,7 @@
 import path from 'path'
 import fs from 'fs/promises'
 import crypto from 'crypto'
-import sharp from 'sharp'
+import sharp, { type Metadata, type Sharp } from 'sharp'
 
 // Docker'da /app/public/uploads kalıcı volume olarak bağlı (YunoHost: $data_dir/uploads).
 // Next.js build sonrası public/'e eklenen dosyaları servis etmediği için dosyalar /media/<ad> route'u ile sunulur.
@@ -12,7 +12,7 @@ const MAX_ANIMATION_FRAMES = 500
 
 type UploadKind = 'avatar' | 'favicon' | 'og' | 'background' | 'icon' | 'cover' | 'thumb' | 'gallery'
 
-const PRESETS: Record<UploadKind, { process: (img: sharp.Sharp) => sharp.Sharp; ext: 'webp' | 'png' | 'jpg' }> = {
+const PRESETS: Record<UploadKind, { process: (img: Sharp) => Sharp; ext: 'webp' | 'png' | 'jpg' }> = {
   // Profil fotoğrafı: kare, 512px
   avatar: { process: (img) => img.resize(512, 512, { fit: 'cover' }).webp({ quality: 85 }), ext: 'webp' },
   // Tarayıcı sekme ikonu: 64px PNG (her tarayıcı destekler)
@@ -41,7 +41,7 @@ const ALLOWED_INPUT_FORMATS = new Set(['jpeg', 'png', 'webp', 'gif', 'avif', 'he
 
 // Görseli doğrular, yeniden kodlar (EXIF/konum bilgisi silinir) ve kaydeder. Herkese açık yolu döner.
 export async function saveUploadedImage(buffer: Buffer, kind: UploadKind): Promise<string> {
-  let metadata: sharp.Metadata
+  let metadata: Metadata
   try {
     metadata = await sharp(buffer).metadata()
   } catch {
